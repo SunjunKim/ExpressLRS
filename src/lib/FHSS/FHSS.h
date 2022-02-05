@@ -31,6 +31,10 @@
 #define FreqCorrectionMax ((int32_t)(100000/FREQ_STEP))
 #define FreqCorrectionMin ((int32_t)(-100000/FREQ_STEP))
 
+#ifndef FORCE_FREQ_CORR
+#define FORCE_FREQ_CORR 0
+#endif
+
 #define FREQ_HZ_TO_REG_VAL(freq) ((uint32_t)((double)freq/(double)FREQ_STEP))
 
 extern volatile uint8_t FHSSptr;
@@ -48,7 +52,7 @@ uint32_t FHSSgetChannelCount(void);
 // get the initial frequency, which is also the sync channel
 static inline uint32_t GetInitialFreq()
 {
-    return FHSSfreqs[sync_channel] - FreqCorrection;
+    return FHSSfreqs[sync_channel] - FORCE_FREQ_CORR - FreqCorrection;
 }
 
 // Get the current sequence pointer
@@ -67,7 +71,7 @@ static inline void FHSSsetCurrIndex(const uint8_t value)
 static inline uint32_t FHSSgetNextFreq()
 {
     FHSSptr = (FHSSptr + 1) % FHSS_SEQUENCE_CNT;
-    uint32_t freq = FHSSfreqs[FHSSsequence[FHSSptr]] - FreqCorrection;
+    uint32_t freq = FHSSfreqs[FHSSsequence[FHSSptr]] - FORCE_FREQ_CORR - FreqCorrection;
     return freq;
 }
 

@@ -104,3 +104,6 @@
 
 # These debugging options send extra information to BetaFlight in the LinkStatistics packet
 #-DDEBUG_BF_LINK_STATS
+
+# This value is to compensate bad XO frequency. Test within +- 1000 range.
+#-DFORCE_FREQ_CORR=0
