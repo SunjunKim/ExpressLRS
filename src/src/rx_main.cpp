@@ -43,6 +43,8 @@ SX1280Driver Radio;
 #define DIVERSITY_ANTENNA_INTERVAL 5
 #define DIVERSITY_ANTENNA_RSSI_TRIGGER 5
 #define PACKET_TO_TOCK_SLACK 200 // Desired buffer time between Packet ISR and Tock ISR
+
+#define FORCE_FREQ_CORR -503
 ///////////////////
 
 device_affinity_t ui_devices[] = {
@@ -536,13 +538,14 @@ void ICACHE_RAM_ATTR HWtimerCallbackTock()
 void LostConnection()
 {
     DBGLN("lost conn fc=%d fo=%d", FreqCorrection, hwTimer.FreqOffset);
+    DBGLN("corr min=%d, max=%d", FreqCorrectionMin, FreqCorrectionMax);
 
     RFmodeCycleMultiplier = 1;
     connectionStatePrev = connectionState;
     connectionState = disconnected; //set lost connection
     RXtimerState = tim_disconnected;
     hwTimer.resetFreqOffset();
-    FreqCorrection = 0;
+    FreqCorrection = FORCE_FREQ_CORR;
     #if !defined(Regulatory_Domain_ISM_2400)
     Radio.SetPPMoffsetReg(0);
     #endif
@@ -575,7 +578,8 @@ void ICACHE_RAM_ATTR TentativeConnection(unsigned long now)
     connectionHasModelMatch = false;
     RXtimerState = tim_disconnected;
     DBGLN("tentative conn");
-    FreqCorrection = 0;
+    FreqCorrection = FORCE_FREQ_CORR;
+    DBGLN("Setting FreqCorrection=%d", FreqCorrection);
     Offset = 0;
     prevOffset = 0;
     LPF_Offset.init(0);
@@ -1209,6 +1213,7 @@ void setup()
 
 void loop()
 {
+    FreqCorrection = FORCE_FREQ_CORR;
     unsigned long now = millis();
     HandleUARTin();
     if (hwTimer.running == false)
