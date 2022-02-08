@@ -24,13 +24,10 @@
 #define Regulatory_Domain_Index 6
 #elif defined Regulatory_Domain_IN_866
 #define Regulatory_Domain_Index 7
-#else
 #elif defined Regulatory_Domain_KC_LOW
 #define Regulatory_Domain_Index 10
-#else
 #elif defined Regulatory_Domain_KC_MID
 #define Regulatory_Domain_Index 11
-#else
 #elif defined Regulatory_Domain_KC_HIGH
 #define Regulatory_Domain_Index 12
 #else
