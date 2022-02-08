@@ -229,6 +229,12 @@ const uint32_t FHSSfreqs[] = {
     FREQ_HZ_TO_REG_VAL(2477400000),
     FREQ_HZ_TO_REG_VAL(2478400000),
     FREQ_HZ_TO_REG_VAL(2479400000)};
+#elif Regulatory_Domain_KC_LOW
+const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2400400000)};
+#elif Regulatory_Domain_KC_MID
+const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2440400000)};
+#elif Regulatory_Domain_KC_HIGH
+const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2479400000)};
 #else
 #error No regulatory domain defined, please define one in user_defines.txt
 #endif
