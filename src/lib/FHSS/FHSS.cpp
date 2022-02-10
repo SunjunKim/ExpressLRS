@@ -132,6 +132,12 @@ const uint32_t FHSSfreqs[] = {
     FREQ_HZ_TO_REG_VAL(925700000),
     FREQ_HZ_TO_REG_VAL(926300000),
     FREQ_HZ_TO_REG_VAL(926900000)};
+#elif Regulatory_Domain_KC_LOW
+const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2400400000), FREQ_HZ_TO_REG_VAL(2400400000), FREQ_HZ_TO_REG_VAL(2400400000)};
+#elif Regulatory_Domain_KC_MID
+const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2440400000), FREQ_HZ_TO_REG_VAL(2440400000), FREQ_HZ_TO_REG_VAL(2440400000)};
+#elif Regulatory_Domain_KC_HIGH
+const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2479400000), FREQ_HZ_TO_REG_VAL(2479400000), FREQ_HZ_TO_REG_VAL(2479400000)};
 #elif Regulatory_Domain_ISM_2400
 const uint32_t FHSSfreqs[] = {
     FREQ_HZ_TO_REG_VAL(2400400000),
@@ -229,12 +235,6 @@ const uint32_t FHSSfreqs[] = {
     FREQ_HZ_TO_REG_VAL(2477400000),
     FREQ_HZ_TO_REG_VAL(2478400000),
     FREQ_HZ_TO_REG_VAL(2479400000)};
-#elif Regulatory_Domain_KC_LOW
-const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2400400000)};
-#elif Regulatory_Domain_KC_MID
-const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2440400000)};
-#elif Regulatory_Domain_KC_HIGH
-const uint32_t FHSSfreqs[] = { FREQ_HZ_TO_REG_VAL(2479400000)};
 #else
 #error No regulatory domain defined, please define one in user_defines.txt
 #endif
@@ -279,6 +279,12 @@ void FHSSrandomiseFHSSsequence(const uint32_t seed)
     INFOLN("Setting 433MHz AU Mode");
 #elif defined Regulatory_Domain_EU_433
     INFOLN("Setting 433MHz EU Mode");
+#elif defined Regulatory_Domain_KC_LOW
+    INFOLN("Setting KC LOW Mode");
+#elif defined Regulatory_Domain_KC_MID
+    INFOLN("Setting KC MID Mode");
+#elif defined Regulatory_Domain_KC_HIGH
+    INFOLN("Setting KC HIGH Mode");
 #elif defined Regulatory_Domain_ISM_2400
     INFOLN("Setting 2400MHz Mode");
 #else

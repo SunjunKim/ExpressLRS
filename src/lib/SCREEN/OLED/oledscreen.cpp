@@ -228,7 +228,15 @@ void OLEDScreen::displayMainScreen(){
         u8g2.drawStr(70,32, buffer);
     #else
         u8g2.setFont(u8g2_font_t0_15_mr);
-        u8g2.drawStr(0,13, "ExpressLRS");
+        #ifdef Regulatory_Domain_KC_LOW
+            u8g2.drawStr(0,13, "KC_LOW");
+        #elif Regulatory_Domain_KC_MID
+            u8g2.drawStr(0,13, "KC_MID");
+        #elif Regulatory_Domain_KC_HIGH
+            u8g2.drawStr(0,13, "KC_HIGH");
+        #else
+            u8g2.drawStr(0,13, "ExpressLRS");
+        #endif
         u8g2.drawStr(0,45, &(rate_string[current_rate_index])[0]);
         u8g2.drawStr(70,45, &(ratio_string[current_ratio_index])[0]);
         u8g2.drawStr(0,60, power.c_str());

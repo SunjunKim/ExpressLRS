@@ -4,7 +4,7 @@
 
 #if defined(Regulatory_Domain_AU_915) || defined(Regulatory_Domain_EU_868) || defined(Regulatory_Domain_IN_866) || defined(Regulatory_Domain_FCC_915) || defined(Regulatory_Domain_AU_433) || defined(Regulatory_Domain_EU_433)
 #include "SX127xDriver.h"
-#elif Regulatory_Domain_ISM_2400
+#elif Regulatory_Domain_ISM_2400 || Regulatory_Domain_KC_LOW || Regulatory_Domain_KC_MID || Regulatory_Domain_KC_HIGH
 #include "SX1280Driver.h"
 #endif
 
@@ -20,16 +20,16 @@
 #define Regulatory_Domain_Index 4
 #elif defined Regulatory_Domain_EU_433
 #define Regulatory_Domain_Index 5
-#elif defined Regulatory_Domain_ISM_2400
-#define Regulatory_Domain_Index 6
-#elif defined Regulatory_Domain_IN_866
-#define Regulatory_Domain_Index 7
 #elif defined Regulatory_Domain_KC_LOW
 #define Regulatory_Domain_Index 10
 #elif defined Regulatory_Domain_KC_MID
 #define Regulatory_Domain_Index 11
 #elif defined Regulatory_Domain_KC_HIGH
 #define Regulatory_Domain_Index 12
+#elif defined Regulatory_Domain_ISM_2400
+#define Regulatory_Domain_Index 6
+#elif defined Regulatory_Domain_IN_866
+#define Regulatory_Domain_Index 7
 #else
 #define Regulatory_Domain_Index 8
 #endif
