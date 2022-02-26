@@ -384,6 +384,7 @@ void ICACHE_RAM_ATTR HandleFHSS()
   // If the next packet should be on the next FHSS frequency, do the hop
   if (!InBindingMode && modresult == 0)
   {
+    FreqCorrection = map(crsf.ChannelDataIn[14], CRSF_CHANNEL_VALUE_1000, CRSF_CHANNEL_VALUE_2000, -1000, 1000);
     Radio.SetFrequencyReg(FHSSgetNextFreq());
   }
 }
@@ -1061,6 +1062,7 @@ void loop()
   CheckReadyToSend();
   CheckConfigChangePending();
   DynamicPower_Update();
+
 
   if (LoggingBackpack->available())
   {

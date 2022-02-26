@@ -7,6 +7,7 @@
  */
 
 #include "OTA.h"
+#include "FHSS.h"
 
 static inline uint8_t ICACHE_RAM_ATTR HybridWideNonceToSwitchIndex(uint8_t nonce)
 {
@@ -32,11 +33,12 @@ static void ICACHE_RAM_ATTR PackChannelDataHybridCommon(volatile uint8_t* Buffer
 #if defined(DEBUG_RCVR_LINKSTATS)
     // Incremental packet counter for verification on the RX side, 32 bits shoved into CH1-CH4
     static uint32_t packetCnt;
-    Buffer[1] = (packetCnt >> 24);
-    Buffer[2] = (packetCnt >> 16);
-    Buffer[3] = (packetCnt >> 8);
-    Buffer[4] = (packetCnt >> 0);
-    Buffer[5] = 0;
+    uint16_t freqCorr_16b = FreqCorrection+10000;
+    Buffer[1] = (packetCnt >> 16);
+    Buffer[2] = (packetCnt >> 8);
+    Buffer[3] = (packetCnt >> 0);
+    Buffer[4] = (freqCorr_16b>>8)&0xFF;
+    Buffer[5] = freqCorr_16b&0xFF;
     ++packetCnt;
 #else
     Buffer[1] = ((crsf->ChannelDataIn[0]) >> 3);
@@ -175,12 +177,15 @@ UnpackChannelData_t UnpackChannelData;
 #if defined(DEBUG_RCVR_LINKSTATS)
 // Sequential PacketID from the TX
 uint32_t debugRcvrLinkstatsPacketId;
+int16_t debugRcvrLinkstatsTxFreqCorr;
 #endif
 
 static void ICACHE_RAM_ATTR UnpackChannelDataHybridCommon(volatile uint8_t* Buffer, CRSF *crsf)
 {
 #if defined(DEBUG_RCVR_LINKSTATS)
-    debugRcvrLinkstatsPacketId = (Buffer[1] << 24) | (Buffer[2] << 16) | (Buffer[3] << 8) | Buffer[4];
+    debugRcvrLinkstatsPacketId = (Buffer[1] << 16) | (Buffer[2] << 8) | Buffer[3];
+    debugRcvrLinkstatsTxFreqCorr = (Buffer[4] << 8) | Buffer[5];
+    debugRcvrLinkstatsTxFreqCorr -= 10000;
 #else
     // The analog channels
     crsf->PackedRCdataOut.ch0 = (Buffer[1] << 3) | ((Buffer[5] & 0b11000000) >> 5);

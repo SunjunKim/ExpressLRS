@@ -1176,6 +1176,7 @@ static void debugRcvrLinkstats()
         // While YOLOing (const void *) away the volatile
         crsfLinkStatistics_t ls = *(crsfLinkStatistics_t *)((const void *)&crsf.LinkStatistics);
         uint32_t packetCounter = debugRcvrLinkstatsPacketId;
+        int16_t txFreqCorrection = debugRcvrLinkstatsTxFreqCorr;
         uint8_t fhss = debugRcvrLinkstatsFhssIdx;
         // actually the previous packet's offset since the update happens in tick, and this will
         // fire right after packet reception (a little before tock)
@@ -1183,11 +1184,11 @@ static void debugRcvrLinkstats()
 
         // Use serial instead of DBG() because do not necessarily want all the debug in our logs
         char buf[50];
-        snprintf(buf, sizeof(buf), "%u,%u,-%u,%u,%d,%u,%u,%d\r\n",
+        snprintf(buf, sizeof(buf), "%u,%u,-%u,%u,%d,%u,%u,%d,%d\r\n",
             packetCounter, ls.active_antenna,
             ls.active_antenna ? ls.uplink_RSSI_2 : ls.uplink_RSSI_1,
             ls.uplink_Link_quality, ls.uplink_SNR,
-            ls.uplink_TX_Power, fhss, pfd);
+            ls.uplink_TX_Power, fhss, pfd, txFreqCorrection);
         Serial.write(buf);
     }
 #endif

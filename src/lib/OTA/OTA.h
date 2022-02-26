@@ -36,6 +36,7 @@ extern UnpackChannelData_t UnpackChannelData;
 
 #if defined(DEBUG_RCVR_LINKSTATS)
 extern uint32_t debugRcvrLinkstatsPacketId;
+extern int16_t debugRcvrLinkstatsTxFreqCorr;
 #endif
 
 #endif // H_OTA
