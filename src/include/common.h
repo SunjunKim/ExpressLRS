@@ -18,6 +18,8 @@ extern uint8_t UID[6];
 extern uint8_t MasterUID[6];
 extern uint16_t CRCInitializer;
 
+#define CW_FREQ 2440000000
+
 typedef enum
 {
     TLM_RATIO_NO_TLM = 0,

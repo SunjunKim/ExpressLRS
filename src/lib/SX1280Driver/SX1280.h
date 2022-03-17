@@ -29,6 +29,8 @@ public:
     void SetFrequencyReg(uint32_t freq);
     void SetRxTimeoutUs(uint32_t interval);
     void SetOutputPower(int8_t power);
+    void startCWTest(uint32_t freq);
+    void startCWTest(uint32_t freq, uint8_t power);
 
 
     int32_t GetFrequencyError();

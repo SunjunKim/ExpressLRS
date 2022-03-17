@@ -245,12 +245,12 @@ void SetRFLinkRate(uint8_t index) // Set speed of RF link
     bool invertIQ = UID[5] & 0x01;
 
     hwTimer.updateInterval(ModParams->interval);
-    Radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(),
-                 ModParams->PreambleLen, invertIQ, ModParams->PayloadLength, 0
+    // Radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(),
+    //              ModParams->PreambleLen, invertIQ, ModParams->PayloadLength, 0
 #if defined(RADIO_SX128X)
-                 , uidMacSeedGet(), CRCInitializer, (ModParams->radio_type == RADIO_TYPE_SX128x_FLRC)
+                //  , uidMacSeedGet(), CRCInitializer, (ModParams->radio_type == RADIO_TYPE_SX128x_FLRC)
 #endif
-                 );
+                //  );
 
     // Wait for (11/10) 110% of time it takes to cycle through all freqs in FHSS table (in ms)
     cycleInterval = ((uint32_t)11U * FHSSgetChannelCount() * ModParams->FHSShopInterval * ModParams->interval) / (10U * 1000U);
@@ -271,13 +271,13 @@ bool ICACHE_RAM_ATTR HandleFHSS()
     }
 
     alreadyFHSS = true;
-    Radio.SetFrequencyReg(FHSSgetNextFreq());
+    // Radio.SetFrequencyReg(FHSSgetNextFreq());
 
     uint8_t modresultTLM = (NonceRX + 1) % (TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval));
 
     if (modresultTLM != 0 || ExpressLRS_currAirRate_Modparams->TLMinterval == TLM_RATIO_NO_TLM) // if we are about to send a tlm response don't bother going back to rx
     {
-        Radio.RXnb();
+        // Radio.RXnb();
     }
     return true;
 }
@@ -299,19 +299,19 @@ bool ICACHE_RAM_ATTR HandleSendTelemetryResponse()
 #endif
 
     alreadyTLMresp = true;
-    Radio.TXdataBuffer[0] = TLM_PACKET;
+    // Radio.TXdataBuffer[0] = TLM_PACKET;
 
     if (NextTelemetryType == ELRS_TELEMETRY_TYPE_LINK || !TelemetrySender.IsActive())
     {
-        Radio.TXdataBuffer[1] = ELRS_TELEMETRY_TYPE_LINK;
+        // Radio.TXdataBuffer[1] = ELRS_TELEMETRY_TYPE_LINK;
         // The value in linkstatistics is "positivized" (inverted polarity)
         // and must be inverted on the TX side. Positive values are used
         // so save a bit to encode which antenna is in use
-        Radio.TXdataBuffer[2] = crsf.LinkStatistics.uplink_RSSI_1 | (antenna << 7);
-        Radio.TXdataBuffer[3] = crsf.LinkStatistics.uplink_RSSI_2 | (connectionHasModelMatch << 7);
-        Radio.TXdataBuffer[4] = crsf.LinkStatistics.uplink_SNR;
-        Radio.TXdataBuffer[5] = crsf.LinkStatistics.uplink_Link_quality;
-        Radio.TXdataBuffer[6] = MspReceiver.GetCurrentConfirm() ? 1 : 0;
+        // Radio.TXdataBuffer[2] = crsf.LinkStatistics.uplink_RSSI_1 | (antenna << 7);
+        // Radio.TXdataBuffer[3] = crsf.LinkStatistics.uplink_RSSI_2 | (connectionHasModelMatch << 7);
+        // Radio.TXdataBuffer[4] = crsf.LinkStatistics.uplink_SNR;
+        // Radio.TXdataBuffer[5] = crsf.LinkStatistics.uplink_Link_quality;
+        // Radio.TXdataBuffer[6] = MspReceiver.GetCurrentConfirm() ? 1 : 0;
 
         NextTelemetryType = ELRS_TELEMETRY_TYPE_DATA;
         // Start the count at 1 because the next will be DATA and doing +1 before checking
@@ -330,23 +330,23 @@ bool ICACHE_RAM_ATTR HandleSendTelemetryResponse()
         }
 
         TelemetrySender.GetCurrentPayload(&packageIndex, &maxLength, &data);
-        Radio.TXdataBuffer[1] = (packageIndex << ELRS_TELEMETRY_SHIFT) + ELRS_TELEMETRY_TYPE_DATA;
-        Radio.TXdataBuffer[2] = maxLength > 0 ? *data : 0;
-        Radio.TXdataBuffer[3] = maxLength >= 1 ? *(data + 1) : 0;
-        Radio.TXdataBuffer[4] = maxLength >= 2 ? *(data + 2) : 0;
-        Radio.TXdataBuffer[5] = maxLength >= 3 ? *(data + 3): 0;
-        Radio.TXdataBuffer[6] = maxLength >= 4 ? *(data + 4): 0;
+        // Radio.TXdataBuffer[1] = (packageIndex << ELRS_TELEMETRY_SHIFT) + ELRS_TELEMETRY_TYPE_DATA;
+        // Radio.TXdataBuffer[2] = maxLength > 0 ? *data : 0;
+        // Radio.TXdataBuffer[3] = maxLength >= 1 ? *(data + 1) : 0;
+        // Radio.TXdataBuffer[4] = maxLength >= 2 ? *(data + 2) : 0;
+        // Radio.TXdataBuffer[5] = maxLength >= 3 ? *(data + 3): 0;
+        // Radio.TXdataBuffer[6] = maxLength >= 4 ? *(data + 4): 0;
     }
 
     uint16_t crc = ota_crc.calc(Radio.TXdataBuffer, 7, CRCInitializer);
-    Radio.TXdataBuffer[0] |= (crc >> 6) & 0b11111100;
-    Radio.TXdataBuffer[7] = crc & 0xFF;
+    // Radio.TXdataBuffer[0] |= (crc >> 6) & 0b11111100;
+    // Radio.TXdataBuffer[7] = crc & 0xFF;
 
 #if defined(Regulatory_Domain_EU_CE_2400)
     if (ChannelIsClear())
 #endif
     {
-        Radio.TXnb();
+        // Radio.TXnb();
     }
     return true;
 }
@@ -528,7 +528,7 @@ void ICACHE_RAM_ATTR HWtimerCallbackTock()
     // Emulate that TX just happened, even if it didn't because channel is not clear
     if(!LBTSuccessCalc.currentIsSet())
     {
-        Radio.TXdoneCallback();
+        // Radio.TXdoneCallback();
     }
 #endif
 
@@ -541,8 +541,8 @@ void ICACHE_RAM_ATTR HWtimerCallbackTock()
     #if defined(RADIO_SX127X)
     if (!didFHSS && !tlmSent && LQCalc.currentIsSet())
     {
-        HandleFreqCorr(Radio.GetFrequencyErrorbool());      // Adjusts FreqCorrection for RX freq offset
-        Radio.SetPPMoffsetReg(FreqCorrection);
+        // HandleFreqCorr(Radio.GetFrequencyErrorbool());      // Adjusts FreqCorrection for RX freq offset
+        // Radio.SetPPMoffsetReg(FreqCorrection);
     }
     #else
         (void)didFHSS;
@@ -568,7 +568,7 @@ void LostConnection()
     hwTimer.resetFreqOffset();
     FreqCorrection = 0;
     #if defined(RADIO_SX127X)
-    Radio.SetPPMoffsetReg(0);
+    // Radio.SetPPMoffsetReg(0);
     #endif
     Offset = 0;
     OffsetDx = 0;
@@ -587,7 +587,7 @@ void LostConnection()
         while(micros() - PFDloop.getIntEventTime() > 250); // time it just after the tock()
         hwTimer.stop();
         SetRFLinkRate(ExpressLRS_nextAirRateIndex); // also sets to initialFreq
-        Radio.RXnb();
+        // Radio.RXnb();
     }
 }
 
@@ -799,12 +799,12 @@ void ICACHE_RAM_ATTR ProcessRFPacket(SX12xxDriverCommon::rx_status const status)
     // For smHybridWide the FHSS slot is added to the CRC in byte 0 on RC_DATA_PACKETs
     if (type != RC_DATA_PACKET || OtaSwitchModeCurrent != smHybridWide)
     {
-        Radio.RXdataBuffer[0] = type;
+        // Radio.RXdataBuffer[0] = type;
     }
     else
     {
         uint8_t NonceFHSSresult = NonceRX % ExpressLRS_currAirRate_Modparams->FHSShopInterval;
-        Radio.RXdataBuffer[0] = type | (NonceFHSSresult << 2);
+        // Radio.RXdataBuffer[0] = type | (NonceFHSSresult << 2);
     }
     uint16_t calculatedCRC = ota_crc.calc(Radio.RXdataBuffer, 7, CRCInitializer);
 
@@ -868,7 +868,7 @@ void ICACHE_RAM_ATTR RXdoneISR(SX12xxDriverCommon::rx_status const status)
 
 void ICACHE_RAM_ATTR TXdoneISR()
 {
-    Radio.RXnb();
+    // Radio.RXnb();
 #if defined(DEBUG_RX_SCOREBOARD)
     DBGW('T');
 #endif
@@ -1015,7 +1015,7 @@ static void HandleUARTin()
 
 static void setupRadio()
 {
-    Radio.currFreq = GetInitialFreq();
+    // Radio.currFreq = GetInitialFreq();
 #if defined(RADIO_SX127X)
     //Radio.currSyncWord = UID[3];
 #endif
@@ -1083,7 +1083,7 @@ static void cycleRfMode(unsigned long now)
         LQCalc.reset();
         // Display the current air rate to the user as an indicator something is happening
         scanIndex++;
-        Radio.RXnb();
+        // Radio.RXnb();
         INFOLN("%u", ExpressLRS_currAirRate_Modparams->interval);
 
         // Switch to FAST_SYNC if not already in it (won't be if was just connected)
@@ -1241,12 +1241,15 @@ void setup()
         hwTimer.callbackTick = &HWtimerCallbackTick;
 
         MspReceiver.SetDataToReceive(ELRS_MSP_BUFFER, MspData, ELRS_MSP_BYTES_PER_CALL);
-        Radio.RXnb();
+        // Radio.RXnb();
         crsf.Begin();
         hwTimer.init();
     }
 
     devicesStart();
+
+    Radio.TXnb();
+    Radio.startCWTest(CW_FREQ, -15);
 }
 
 void loop()
@@ -1269,7 +1272,7 @@ void loop()
 
     if (config.IsModified() && !InBindingMode)
     {
-        Radio.SetTxIdleMode();
+        // Radio.SetTxIdleMode();
         LostConnection();
         config.Commit();
         devicesTriggerEvent();
@@ -1386,10 +1389,10 @@ void EnterBindingMode()
 
     // Start attempting to bind
     // Lock the RF rate and freq while binding
-    SetRFLinkRate(RATE_BINDING);
-    Radio.SetFrequencyReg(GetInitialFreq());
+    // SetRFLinkRate(RATE_BINDING);
+    // Radio.SetFrequencyReg(GetInitialFreq());
     // If the Radio Params (including InvertIQ) parameter changed, need to restart RX to take effect
-    Radio.RXnb();
+    // Radio.RXnb();
 
     DBGLN("Entered binding mode at freq = %d", Radio.currFreq);
     devicesTriggerEvent();
@@ -1405,7 +1408,7 @@ void ExitBindingMode()
     }
 
     // Prevent any new packets from coming in
-    Radio.SetTxIdleMode();
+    // Radio.SetTxIdleMode();
     LostConnection();
     // Write the values to eeprom
     config.Commit();

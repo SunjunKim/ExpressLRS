@@ -253,7 +253,7 @@ void ICACHE_RAM_ATTR ProcessTLMpacket(SX12xxDriverCommon::rx_status const status
   }
   uint16_t const inCRC = (((uint16_t)Radio.RXdataBuffer[0] & 0b11111100) << 6) | Radio.RXdataBuffer[7];
 
-  Radio.RXdataBuffer[0] &= 0b11;
+  // Radio.RXdataBuffer[0] &= 0b11;
   uint16_t const calculatedCRC = ota_crc.calc(Radio.RXdataBuffer, 7, CRCInitializer);
 
   uint8_t const type = Radio.RXdataBuffer[0] & TLM_PACKET;
@@ -326,19 +326,19 @@ void ICACHE_RAM_ATTR GenerateSyncPacketData()
     LastTLMpacketRecvMillis = SyncPacketLastSent;
   ExpressLRS_currAirRate_Modparams->TLMinterval = newTlmRatio;
 
-  Radio.TXdataBuffer[0] = SYNC_PACKET & 0b11;
-  Radio.TXdataBuffer[1] = FHSSgetCurrIndex();
-  Radio.TXdataBuffer[2] = NonceTX;
-  Radio.TXdataBuffer[3] = ((Index & SYNC_PACKET_RATE_MASK) << SYNC_PACKET_RATE_OFFSET) +
-                          ((newTlmRatio & SYNC_PACKET_TLM_MASK) << SYNC_PACKET_TLM_OFFSET) +
-                          ((SwitchEncMode & SYNC_PACKET_SWITCH_MASK) << SYNC_PACKET_SWITCH_OFFSET);
-  Radio.TXdataBuffer[4] = UID[3];
-  Radio.TXdataBuffer[5] = UID[4];
-  Radio.TXdataBuffer[6] = UID[5];
+  // Radio.TXdataBuffer[0] = SYNC_PACKET & 0b11;
+  // Radio.TXdataBuffer[1] = FHSSgetCurrIndex();
+  // Radio.TXdataBuffer[2] = NonceTX;
+  // Radio.TXdataBuffer[3] = ((Index & SYNC_PACKET_RATE_MASK) << SYNC_PACKET_RATE_OFFSET) +
+  //                         ((newTlmRatio & SYNC_PACKET_TLM_MASK) << SYNC_PACKET_TLM_OFFSET) +
+  //                         ((SwitchEncMode & SYNC_PACKET_SWITCH_MASK) << SYNC_PACKET_SWITCH_OFFSET);
+  // Radio.TXdataBuffer[4] = UID[3];
+  // Radio.TXdataBuffer[5] = UID[4];
+  // Radio.TXdataBuffer[6] = UID[5];
   // For model match, the last byte of the binding ID is XORed with the inverse of the modelId
   if (!InBindingMode && config.GetModelMatch())
   {
-    Radio.TXdataBuffer[6] ^= (~crsf.getModelID()) & MODELMATCH_MASK;
+    // Radio.TXdataBuffer[6] ^= (~crsf.getModelID()) & MODELMATCH_MASK;
   }
 }
 
@@ -372,12 +372,12 @@ void ICACHE_RAM_ATTR SetRFLinkRate(uint8_t index) // Set speed of RF link (hz)
 
   DBGLN("set rate %u", index);
   hwTimer.updateInterval(ModParams->interval);
-  Radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(),
-               ModParams->PreambleLen, invertIQ, ModParams->PayloadLength, ModParams->interval
-#if defined(RADIO_SX128X)
-               , uidMacSeedGet(), CRCInitializer, (ModParams->radio_type == RADIO_TYPE_SX128x_FLRC)
-#endif
-               );
+//   Radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, GetInitialFreq(),
+//                ModParams->PreambleLen, invertIQ, ModParams->PayloadLength, ModParams->interval
+// #if defined(RADIO_SX128X)
+//                , uidMacSeedGet(), CRCInitializer, (ModParams->radio_type == RADIO_TYPE_SX128x_FLRC)
+// #endif
+//                );
 
   ExpressLRS_currAirRate_Modparams = ModParams;
   ExpressLRS_currAirRate_RFperfParams = RFperf;
@@ -394,7 +394,7 @@ void ICACHE_RAM_ATTR HandleFHSS()
   // If the next packet should be on the next FHSS frequency, do the hop
   if (!InBindingMode && modresult == 0)
   {
-    Radio.SetFrequencyReg(FHSSgetNextFreq());
+    // Radio.SetFrequencyReg(FHSSgetNextFreq());
   }
 }
 
@@ -404,7 +404,7 @@ void ICACHE_RAM_ATTR HandlePrepareForTLM()
   // If next packet is going to be telemetry, start listening to have a large receive window (time-wise)
   if (ExpressLRS_currAirRate_Modparams->TLMinterval != TLM_RATIO_NO_TLM && modresult == 0)
   {
-    Radio.RXnb();
+    // Radio.RXnb();
     TelemetryRcvPhase = ttrpPreReceiveGap;
   }
 }
@@ -445,13 +445,13 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
       uint8_t maxLength;
       uint8_t packageIndex;
       MspSender.GetCurrentPayload(&packageIndex, &maxLength, &data);
-      Radio.TXdataBuffer[0] = MSP_DATA_PACKET & 0b11;
-      Radio.TXdataBuffer[1] = packageIndex;
-      Radio.TXdataBuffer[2] = maxLength > 0 ? *data : 0;
-      Radio.TXdataBuffer[3] = maxLength >= 1 ? *(data + 1) : 0;
-      Radio.TXdataBuffer[4] = maxLength >= 2 ? *(data + 2) : 0;
-      Radio.TXdataBuffer[5] = maxLength >= 3 ? *(data + 3): 0;
-      Radio.TXdataBuffer[6] = maxLength >= 4 ? *(data + 4): 0;
+      // Radio.TXdataBuffer[0] = MSP_DATA_PACKET & 0b11;
+      // Radio.TXdataBuffer[1] = packageIndex;
+      // Radio.TXdataBuffer[2] = maxLength > 0 ? *data : 0;
+      // Radio.TXdataBuffer[3] = maxLength >= 1 ? *(data + 1) : 0;
+      // Radio.TXdataBuffer[4] = maxLength >= 2 ? *(data + 2) : 0;
+      // Radio.TXdataBuffer[5] = maxLength >= 3 ? *(data + 3): 0;
+      // Radio.TXdataBuffer[6] = maxLength >= 4 ? *(data + 4): 0;
       // send channel data next so the channel messages also get sent during msp transmissions
       NextPacketIsMspData = false;
       // counter can be increased even for normal msp messages since it's reset if a real bind message should be sent
@@ -465,25 +465,25 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
     {
       // always enable msp after a channel package since the slot is only used if MspSender has data to send
       NextPacketIsMspData = true;
-      PackChannelData(Radio.TXdataBuffer, &crsf, TelemetryReceiver.GetCurrentConfirm(),
-        NonceTX, TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval));
+      // PackChannelData(Radio.TXdataBuffer, &crsf, TelemetryReceiver.GetCurrentConfirm(),
+      //   NonceTX, TLMratioEnumToValue(ExpressLRS_currAirRate_Modparams->TLMinterval));
     }
   }
 
   // artificially inject the low bits of the nonce on data packets, this will be overwritten with the CRC after it's calculated
-  if (Radio.TXdataBuffer[0] == RC_DATA_PACKET && OtaSwitchModeCurrent == smHybridWide)
-    Radio.TXdataBuffer[0] |= NonceFHSSresult << 2;
+  // if (Radio.TXdataBuffer[0] == RC_DATA_PACKET && OtaSwitchModeCurrent == smHybridWide)
+  //   Radio.TXdataBuffer[0] |= NonceFHSSresult << 2;
 
   ///// Next, Calculate the CRC and put it into the buffer /////
   uint16_t crc = ota_crc.calc(Radio.TXdataBuffer, 7, CRCInitializer);
-  Radio.TXdataBuffer[0] = (Radio.TXdataBuffer[0] & 0b11) | ((crc >> 6) & 0b11111100);
-  Radio.TXdataBuffer[7] = crc & 0xFF;
+  // Radio.TXdataBuffer[0] = (Radio.TXdataBuffer[0] & 0b11) | ((crc >> 6) & 0b11111100);
+  // Radio.TXdataBuffer[7] = crc & 0xFF;
 
 #if defined(Regulatory_Domain_EU_CE_2400)
   if (ChannelIsClear())
 #endif
   {
-    Radio.TXnb();
+    // Radio.TXnb();
   }
 }
 
@@ -495,7 +495,7 @@ void ICACHE_RAM_ATTR timerCallbackNormal()
 #if defined(Regulatory_Domain_EU_CE_2400)
   if(!LBTSuccessCalc.currentIsSet())
   {
-    Radio.TXdoneCallback();
+    // Radio.TXdoneCallback();
   }
 #endif
 
@@ -843,7 +843,7 @@ void EnterBindingMode()
   // Start attempting to bind
   // Lock the RF rate and freq while binding
   SetRFLinkRate(RATE_BINDING);
-  Radio.SetFrequencyReg(GetInitialFreq());
+  // Radio.SetFrequencyReg(GetInitialFreq());
   // Start transmitting again
   hwTimer.resume();
 
@@ -1003,7 +1003,7 @@ void setup()
   config.SetStorageProvider(&eeprom); // Pass pointer to the Config class for access to storage
   config.Load(); // Load the stored values from eeprom
 
-  Radio.currFreq = GetInitialFreq(); //set frequency first or an error will occur!!!
+  // Radio.currFreq = GetInitialFreq(); //set frequency first or an error will occur!!!
   #if defined(RADIO_SX127X)
   //Radio.currSyncWord = UID[3];
   #endif
@@ -1034,6 +1034,11 @@ void setup()
   }
 
   devicesStart();
+
+  Radio.TXnb();
+  POWERMGNT.setPower((PowerLevels_e)config.GetPower());
+  Radio.startCWTest(CW_FREQ, -15);
+
 }
 
 void loop()

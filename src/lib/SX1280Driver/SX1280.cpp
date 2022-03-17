@@ -87,7 +87,25 @@ bool SX1280Driver::Begin()
 #if defined(USE_SX1280_DCDC)
     hal.WriteCommand(SX1280_RADIO_SET_REGULATORMODE, SX1280_USE_DCDC);     // Enable DCDC converter instead of LDO
 #endif
+
+    hal.TXenable();
+
     return true;
+}
+
+void SX1280Driver::startCWTest(uint32_t freq)
+{
+    SetFrequencyHz(freq);
+
+    uint8_t buffer[1];
+    buffer[0] = SX1280_RADIO_SET_TXCONTINUOUSWAVE;
+    hal.WriteCommand(SX1280_RADIO_SET_TXCONTINUOUSWAVE, buffer, 0);
+}
+
+void SX1280Driver::startCWTest(uint32_t freq, uint8_t power)
+{
+    SetOutputPower(power);
+    startCWTest(freq);
 }
 
 void SX1280Driver::Config(uint8_t bw, uint8_t sf, uint8_t cr, uint32_t freq,
