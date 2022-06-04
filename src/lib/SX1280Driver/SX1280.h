@@ -33,7 +33,8 @@ public:
     void startCWTest(uint32_t freq, uint8_t power);
 
 
-    int32_t GetFrequencyError();
+    bool GetFrequencyErrorbool();
+    bool FrequencyErrorAvailable() const { return modeSupportsFei && (LastPacketSNR > 0); }
 
     void TXnb();
     void RXnb();
@@ -43,7 +44,6 @@ public:
 
     void GetStatus();
 
-    bool GetFrequencyErrorbool();
     uint8_t GetRxBufferAddr();
     int8_t GetRssiInst();
     void GetLastPacketStats();
@@ -51,6 +51,7 @@ public:
 private:
     SX1280_RadioOperatingModes_t currOpmode = SX1280_MODE_SLEEP;
     uint8_t packet_mode;
+    bool modeSupportsFei;
 
     void SetMode(SX1280_RadioOperatingModes_t OPmode);
     void SetFIFOaddr(uint8_t txBaseAddr, uint8_t rxBaseAddr);

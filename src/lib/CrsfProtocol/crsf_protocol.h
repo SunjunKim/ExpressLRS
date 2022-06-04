@@ -26,10 +26,6 @@
 
 #define CRSF_CRC_POLY 0xd5
 
-#ifndef RCVR_UART_BAUD
-#define RCVR_UART_BAUD 420000
-#endif
-
 #define CRSF_NUM_CHANNELS 16
 #define CRSF_CHANNEL_VALUE_MIN  172
 #define CRSF_CHANNEL_VALUE_1000 191
@@ -61,12 +57,18 @@
 #define CRSF_TELEMETRY_CRC_LENGTH 1
 #define CRSF_TELEMETRY_TOTAL_SIZE(x) (x + CRSF_FRAME_LENGTH_EXT_TYPE_CRC)
 
-// Macros for big-endian (assume little endian host for now) etc
-#define CRSF_DEC_U16(x) ((uint16_t)__builtin_bswap16(x))
-#define CRSF_DEC_I16(x) ((int16_t)CRSF_DEC_U16(x))
-#define CRSF_DEC_U24(x) (CRSF_DEC_U32((uint32_t)x << 8))
-#define CRSF_DEC_U32(x) ((uint32_t)__builtin_bswap32(x))
-#define CRSF_DEC_I32(x) ((int32_t)CRSF_DEC_U32(x))
+#define AUX1 4
+#define AUX2 5
+#define AUX3 6
+#define AUX4 7
+#define AUX5 8
+#define AUX6 9
+#define AUX7 10
+#define AUX8 11
+#define AUX9 12
+#define AUX10 13
+#define AUX11 14
+#define AUX12 15
 
 //////////////////////////////////////////////////////////////
 
@@ -79,6 +81,7 @@ typedef enum
     CRSF_FRAMETYPE_GPS = 0x02,
     CRSF_FRAMETYPE_VARIO = 0x07,
     CRSF_FRAMETYPE_BATTERY_SENSOR = 0x08,
+    CRSF_FRAMETYPE_BARO_ALTITUDE = 0x09,
     CRSF_FRAMETYPE_LINK_STATISTICS = 0x14,
     CRSF_FRAMETYPE_OPENTX_SYNC = 0x10,
     CRSF_FRAMETYPE_RADIO_ID = 0x3A,
@@ -123,6 +126,7 @@ enum {
 enum {
     CRSF_FRAME_GPS_PAYLOAD_SIZE = 15,
     CRSF_FRAME_VARIO_PAYLOAD_SIZE = 2,
+    CRSF_FRAME_BARO_ALTITUDE_PAYLOAD_SIZE = 2,
     CRSF_FRAME_BATTERY_SENSOR_PAYLOAD_SIZE = 8,
     CRSF_FRAME_ATTITUDE_PAYLOAD_SIZE = 6,
     CRSF_FRAME_DEVICE_INFO_PAYLOAD_SIZE = 48,
@@ -185,6 +189,8 @@ typedef struct crsf_header_s
     uint8_t type;        // from crsf_frame_type_e
 } PACKED crsf_header_t;
 
+#define CRSF_MK_FRAME_T(payload) struct payload##_frame_s { crsf_header_t h; payload p; uint8_t crc; } PACKED
+
 // Used by extended header frames (type in range 0x28 to 0x96)
 typedef struct crsf_ext_header_s
 {
@@ -239,7 +245,7 @@ typedef struct deviceInformationPacket_s
     uint8_t parameterVersion;
 } PACKED deviceInformationPacket_t;
 
-#define DEVICE_INFORMATION_PAYLOAD_LENGTH (sizeof(deviceInformationPacket_t) + device_name_size)
+#define DEVICE_INFORMATION_PAYLOAD_LENGTH (sizeof(deviceInformationPacket_t) + strlen(device_name)+1)
 #define DEVICE_INFORMATION_LENGTH (sizeof(crsf_ext_header_t) + DEVICE_INFORMATION_PAYLOAD_LENGTH + CRSF_FRAME_CRC_SIZE)
 #define DEVICE_INFORMATION_FRAME_SIZE (DEVICE_INFORMATION_PAYLOAD_LENGTH + CRSF_FRAME_LENGTH_EXT_TYPE_CRC)
 
