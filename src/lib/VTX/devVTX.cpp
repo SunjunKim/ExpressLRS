@@ -11,8 +11,10 @@
 #define PITMODE_ON      1
 
 extern CRSF crsf;
-extern Stream *LoggingBackpack;
+extern Stream *TxBackpack;
 uint8_t pitmodeAuxState = 0;
+
+extern bool ICACHE_RAM_ATTR IsArmed();
 
 static enum VtxSendState_e
 {
@@ -80,7 +82,11 @@ static void VtxConfigToMSPOut()
     }
 
     crsf.AddMspMessage(&packet);
-    MSP::sendPacket(&packet, LoggingBackpack); // send to tx-backpack as MSP
+
+    if (!IsArmed()) // Do not send while armed.  There is no need to change the video frequency while armed.  It can also cause VRx modules to flash up their OSD menu e.g. Rapidfire.
+    {
+        MSP::sendPacket(&packet, TxBackpack); // send to tx-backpack as MSP
+    }
 }
 
 static int event()

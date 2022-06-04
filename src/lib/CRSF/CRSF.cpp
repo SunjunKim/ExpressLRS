@@ -1,12 +1,11 @@
 #include "CRSF.h"
+#include "device.h"
 #include "FIFO.h"
 #include "telemetry_protocol.h"
 #include "logging.h"
 #include "helpers.h"
 
 #if defined(PLATFORM_ESP32)
-#include "device.h"
-
 // UART0 is used since for DupleTX we can connect directly through IO_MUX and not the Matrix
 // for better performance, and on other targets (mostly using pin 13), it always uses Matrix
 HardwareSerial CRSF::Port(0);
@@ -14,7 +13,7 @@ portMUX_TYPE FIFOmux = portMUX_INITIALIZER_UNLOCKED;
 
 RTC_DATA_ATTR int rtcModelId = 0;
 #elif defined(PLATFORM_ESP8266)
-HardwareSerial CRSF::Port = Serial;
+HardwareSerial CRSF::Port(0);
 #elif CRSF_TX_MODULE_STM32
 HardwareSerial CRSF::Port(GPIO_PIN_RCSIGNAL_RX, GPIO_PIN_RCSIGNAL_TX);
 #if defined(STM32F3) || defined(STM32F3xx)
@@ -52,14 +51,12 @@ volatile uint8_t CRSF::ParameterUpdateData[3] = {0};
 
 static FIFO MspWriteFIFO;
 
-void inline CRSF::nullCallback(void) {}
+void (*CRSF::disconnected)() = nullptr; // called when CRSF stream is lost
+void (*CRSF::connected)() = nullptr;    // called when CRSF stream is regained
 
-void (*CRSF::disconnected)() = &nullCallback; // called when CRSF stream is lost
-void (*CRSF::connected)() = &nullCallback;    // called when CRSF stream is regained
-
-void (*CRSF::RecvParameterUpdate)() = &nullCallback; // called when recv parameter update req, ie from LUA
-void (*CRSF::RecvModelUpdate)() = &nullCallback; // called when model id cahnges, ie command from Radio
-void (*CRSF::RCdataCallback)() = &nullCallback; // called when there is new RC data
+void (*CRSF::RecvParameterUpdate)() = nullptr; // called when recv parameter update req, ie from LUA
+void (*CRSF::RecvModelUpdate)() = nullptr; // called when model id cahnges, ie command from Radio
+void (*CRSF::RCdataCallback)() = nullptr; // called when there is new RC data
 
 /// UART Handling ///
 volatile uint8_t CRSF::SerialInPacketLen = 0; // length of the CRSF packet as measured
@@ -79,7 +76,7 @@ uint32_t CRSF::RequestedRCpacketInterval = 5000; // default to 200hz as per 'nor
 volatile uint32_t CRSF::RCdataLastRecv = 0;
 volatile int32_t CRSF::OpenTXsyncOffset = 0;
 bool CRSF::OpentxSyncActive = true;
-uint32_t CRSF::OpenTXsyncOffsetSafeMargin = 4000; // 400us
+uint32_t CRSF::OpenTXsyncOffsetSafeMargin = 1000; // 100us
 
 /// UART Handling ///
 uint32_t CRSF::GoodPktsCount = 0;
@@ -89,8 +86,12 @@ uint32_t CRSF::UARTwdtLastChecked;
 uint8_t CRSF::CRSFoutBuffer[CRSF_MAX_PACKET_LEN] = {0};
 uint8_t CRSF::maxPacketBytes = CRSF_MAX_PACKET_LEN;
 uint8_t CRSF::maxPeriodBytes = CRSF_MAX_PACKET_LEN;
-uint32_t CRSF::TxToHandsetBauds[] = {400000, 115200, 5250000, 3750000, 1870000, 921600};
+uint32_t CRSF::TxToHandsetBauds[] = {400000, 115200, 5250000, 3750000, 1870000, 921600, 2250000};
 uint8_t CRSF::UARTcurrentBaudIdx = 0;
+uint32_t CRSF::UARTrequestedBaud = 400000;
+#if defined(PLATFORM_ESP32)
+bool CRSF::UARTinverted = false;
+#endif
 
 bool CRSF::CRSFstate = false;
 
@@ -113,8 +114,8 @@ void CRSF::Begin()
     UARTwdtLastChecked = millis() + UARTwdtInterval; // allows a delay before the first time the UARTwdt() function is called
 
 #if defined(PLATFORM_ESP32)
-    // disableCore0WDT(); PAK
     portDISABLE_INTERRUPTS();
+    UARTinverted = firmwareOptions.uart_inverted;
     CRSF::Port.begin(TxToHandsetBauds[UARTcurrentBaudIdx], SERIAL_8N1,
                      GPIO_PIN_RCSIGNAL_RX, GPIO_PIN_RCSIGNAL_TX,
                      false, 500);
@@ -124,13 +125,13 @@ void CRSF::Begin()
     if (esp_reset_reason() != ESP_RST_POWERON)
     {
         modelId = rtcModelId;
-        RecvModelUpdate();
+        if (RecvModelUpdate) RecvModelUpdate();
     }
 #elif defined(PLATFORM_ESP8266)
-    CRSF::Port.flush();
-    CRSF::Port.updateBaudRate(TxToHandsetBauds[UARTcurrentBaudIdx]);
-    // Invert RX/TX
-    USC0(UART0) |= BIT(UCRXI) | BIT(UCTXI);
+    // Uses default UART pins
+    CRSF::Port.begin(TxToHandsetBauds[UARTcurrentBaudIdx]);
+    // Invert RX/TX (not done, connection is full duplex uninverted)
+    //USC0(UART0) |= BIT(UCRXI) | BIT(UCTXI);
     // No log message because this is our only UART
 
 #elif defined(PLATFORM_STM32)
@@ -353,7 +354,9 @@ void ICACHE_RAM_ATTR CRSF::sendSyncPacketToTX() // in values in us.
 void ICACHE_RAM_ATTR CRSF::GetChannelDataIn() // data is packed as 11 bits per channel
 {
     const volatile crsf_channels_t *rcChannels = &CRSF::inBuffer.asRCPacket_t.channels;
-    uint16_t prev_AUX1 = ChannelDataIn[4];
+    #if defined(PLATFORM_ESP32)
+    uint16_t prev_AUX1 = ChannelDataIn[AUX1];
+    #endif
 
     ChannelDataIn[0] = (rcChannels->ch0);
     ChannelDataIn[1] = (rcChannels->ch1);
@@ -371,9 +374,9 @@ void ICACHE_RAM_ATTR CRSF::GetChannelDataIn() // data is packed as 11 bits per c
     ChannelDataIn[13] = (rcChannels->ch13);
     ChannelDataIn[14] = (rcChannels->ch14);
     ChannelDataIn[15] = (rcChannels->ch15);
-        
+
     #if defined(PLATFORM_ESP32)
-    if (prev_AUX1 != ChannelDataIn[4]) // for monitoring arming state
+    if (prev_AUX1 != ChannelDataIn[AUX1]) // for monitoring arming state
     {
         devicesTriggerEvent();
     }
@@ -388,7 +391,7 @@ bool ICACHE_RAM_ATTR CRSF::ProcessPacket()
     {
         CRSFstate = true;
         DBGLN("CRSF UART Connected");
-        connected();
+        if (connected) connected();
     }
 
     const uint8_t packetType = CRSF::inBuffer.asRCPacket_t.header.type;
@@ -427,14 +430,14 @@ bool ICACHE_RAM_ATTR CRSF::ProcessPacket()
             #if defined(PLATFORM_ESP32)
             rtcModelId = modelId;
             #endif
-            RecvModelUpdate();
+            if (RecvModelUpdate) RecvModelUpdate();
         }
         else
         {
             ParameterUpdateData[0] = packetType;
             ParameterUpdateData[1] = SerialInBuffer[5];
             ParameterUpdateData[2] = SerialInBuffer[6];
-            RecvParameterUpdate();
+            if (RecvParameterUpdate) RecvParameterUpdate();
         }
 
         packetReceived = true;
@@ -616,7 +619,7 @@ void ICACHE_RAM_ATTR CRSF::handleUARTin()
                     {
                         //delayMicroseconds(50);
                         handleUARTout();
-                        RCdataCallback();
+                        if (RCdataCallback) RCdataCallback();
                     }
                 }
                 else
@@ -700,20 +703,24 @@ void ICACHE_RAM_ATTR CRSF::handleUARTout()
 void ICACHE_RAM_ATTR CRSF::duplex_set_RX()
 {
 #if defined(PLATFORM_ESP32)
-  #if (GPIO_PIN_RCSIGNAL_TX == GPIO_PIN_RCSIGNAL_RX)
-    ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, GPIO_MODE_INPUT));
-    #ifdef UART_INVERTED
-    gpio_matrix_in((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, U0RXD_IN_IDX, true);
-    gpio_pulldown_en((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
-    gpio_pullup_dis((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
-    #else
-    gpio_matrix_in((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, U0RXD_IN_IDX, false);
-    gpio_pullup_en((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
-    gpio_pulldown_dis((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
-    #endif
-  #endif
+    if (GPIO_PIN_RCSIGNAL_TX == GPIO_PIN_RCSIGNAL_RX)
+    {
+        ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, GPIO_MODE_INPUT));
+        if (UARTinverted)
+        {
+            gpio_matrix_in((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, U0RXD_IN_IDX, true);
+            gpio_pulldown_en((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
+            gpio_pullup_dis((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
+        }
+        else
+        {
+            gpio_matrix_in((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, U0RXD_IN_IDX, false);
+            gpio_pullup_en((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
+            gpio_pulldown_dis((gpio_num_t)GPIO_PIN_RCSIGNAL_RX);
+        }
+    }
 #elif defined(PLATFORM_ESP8266)
-    // Enable loopback on UART0 to connect the RX pin to the TX pin
+    // Enable loopback on UART0 to connect the RX pin to the TX pin (not done, connection is full duplex uninverted)
     //USC0(UART0) |= BIT(UCLBE);
 #elif defined(GPIO_PIN_BUFFER_OE) && (GPIO_PIN_BUFFER_OE != UNDEF_PIN)
     digitalWrite(GPIO_PIN_BUFFER_OE, LOW ^ GPIO_PIN_BUFFER_OE_INVERTED);
@@ -725,25 +732,29 @@ void ICACHE_RAM_ATTR CRSF::duplex_set_RX()
 void ICACHE_RAM_ATTR CRSF::duplex_set_TX()
 {
 #if defined(PLATFORM_ESP32)
-  #if (GPIO_PIN_RCSIGNAL_TX == GPIO_PIN_RCSIGNAL_RX)
-    ESP_ERROR_CHECK(gpio_set_pull_mode((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, GPIO_FLOATING));
-    ESP_ERROR_CHECK(gpio_set_pull_mode((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, GPIO_FLOATING));
-    #ifdef UART_INVERTED
-    ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, 0));
-    ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, GPIO_MODE_OUTPUT));
-    constexpr uint8_t MATRIX_DETACH_IN_LOW = 0x30; // routes 0 to matrix slot
-    gpio_matrix_in(MATRIX_DETACH_IN_LOW, U0RXD_IN_IDX, false); // Disconnect RX from all pads
-    gpio_matrix_out((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, U0TXD_OUT_IDX, true, false);
-    #else
-    ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, 1));
-    ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, GPIO_MODE_OUTPUT));
-    constexpr uint8_t MATRIX_DETACH_IN_HIGH = 0x38; // routes 1 to matrix slot
-    gpio_matrix_in(MATRIX_DETACH_IN_HIGH, U0RXD_IN_IDX, false); // Disconnect RX from all pads
-    gpio_matrix_out((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, U0TXD_OUT_IDX, false, false);
-    #endif
-  #endif
+    if (GPIO_PIN_RCSIGNAL_TX == GPIO_PIN_RCSIGNAL_RX)
+    {
+        ESP_ERROR_CHECK(gpio_set_pull_mode((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, GPIO_FLOATING));
+        ESP_ERROR_CHECK(gpio_set_pull_mode((gpio_num_t)GPIO_PIN_RCSIGNAL_RX, GPIO_FLOATING));
+        if (UARTinverted)
+        {
+            ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, 0));
+            ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, GPIO_MODE_OUTPUT));
+            constexpr uint8_t MATRIX_DETACH_IN_LOW = 0x30; // routes 0 to matrix slot
+            gpio_matrix_in(MATRIX_DETACH_IN_LOW, U0RXD_IN_IDX, false); // Disconnect RX from all pads
+            gpio_matrix_out((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, U0TXD_OUT_IDX, true, false);
+        }
+        else
+        {
+            ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, 1));
+            ESP_ERROR_CHECK(gpio_set_direction((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, GPIO_MODE_OUTPUT));
+            constexpr uint8_t MATRIX_DETACH_IN_HIGH = 0x38; // routes 1 to matrix slot
+            gpio_matrix_in(MATRIX_DETACH_IN_HIGH, U0RXD_IN_IDX, false); // Disconnect RX from all pads
+            gpio_matrix_out((gpio_num_t)GPIO_PIN_RCSIGNAL_TX, U0TXD_OUT_IDX, false, false);
+        }
+    }
 #elif defined(PLATFORM_ESP8266)
-    // Disable loopback to disconnect the RX pin from the TX pin
+    // Disable loopback to disconnect the RX pin from the TX pin (not done, connection is full duplex uninverted)
     //USC0(UART0) &= ~BIT(UCLBE);
 #elif defined(GPIO_PIN_BUFFER_OE) && (GPIO_PIN_BUFFER_OE != UNDEF_PIN)
     digitalWrite(GPIO_PIN_BUFFER_OE, HIGH ^ GPIO_PIN_BUFFER_OE_INVERTED);
@@ -754,7 +765,6 @@ void ICACHE_RAM_ATTR CRSF::duplex_set_TX()
 
 void ICACHE_RAM_ATTR CRSF::adjustMaxPacketSize()
 {
-    uint32_t UARTrequestedBaud = TxToHandsetBauds[UARTcurrentBaudIdx];
     // baud / 10bits-per-byte / 2 windows (1RX, 1TX) / rate * 0.80 (leeway)
     maxPeriodBytes = UARTrequestedBaud / 10 / 2 / (1000000/RequestedRCpacketInterval) * 80 / 100;
     maxPeriodBytes = maxPeriodBytes > HANDSET_TELEMETRY_FIFO_SIZE ? HANDSET_TELEMETRY_FIFO_SIZE : maxPeriodBytes;
@@ -763,6 +773,57 @@ void ICACHE_RAM_ATTR CRSF::adjustMaxPacketSize()
     maxPacketBytes = maxPeriodBytes > CRSF_MAX_PACKET_LEN ? CRSF_MAX_PACKET_LEN : maxPeriodBytes;
     DBGLN("Adjusted max packet size %u-%u", maxPacketBytes, maxPeriodBytes);
 }
+
+#if defined(PLATFORM_ESP32)
+uint32_t CRSF::autobaud()
+{
+    static enum { INIT, MEASURED, INVERTED } state;
+
+    uint32_t *autobaud_reg = (uint32_t *)UART_AUTOBAUD_REG(0);
+    uint32_t *rxd_cnt_reg = (uint32_t *)UART_RXD_CNT_REG(0);
+
+    if (state == MEASURED) {
+        UARTinverted = !UARTinverted;
+        state = INVERTED;
+        return UARTrequestedBaud;
+    } else if (state == INVERTED) {
+        UARTinverted = !UARTinverted;
+        state = INIT;
+    }
+
+    if ((*autobaud_reg & 1) == 0) {
+        *autobaud_reg = (4 << 8) | 1;    // enable, glitch filter 4
+        return 400000;
+    } else if ((*autobaud_reg & 1) && (*rxd_cnt_reg < 300))
+        return 400000;
+
+    state = MEASURED;
+
+    uint32_t low_period  = *(uint32_t *)UART_LOWPULSE_REG(0);
+    uint32_t high_period = *(uint32_t *)UART_HIGHPULSE_REG(0);
+    *autobaud_reg = (4 << 8) | 0;
+
+    DBGLN("autobaud: low %d, high %d", low_period, high_period);
+    // sample code at https://github.com/espressif/esp-idf/issues/3336
+    // says baud rate = 80000000/min(UART_LOWPULSE_REG, UART_HIGHPULSE_REG);
+    // Based on testing use max and add 2 for lowest deviation
+    int32_t calulatedBaud = 80000000 / (max(low_period, high_period) + 2);
+    int32_t bestBaud = (int32_t)TxToHandsetBauds[0];
+    for(int i=0 ; i<ARRAY_SIZE(TxToHandsetBauds) ; i++)
+    {
+        if (abs(calulatedBaud - bestBaud) > abs(calulatedBaud - (int32_t)TxToHandsetBauds[i]))
+        {
+            bestBaud = (int32_t)TxToHandsetBauds[i];
+        }
+    }
+    return bestBaud;
+}
+#else
+uint32_t CRSF::autobaud() {
+    UARTcurrentBaudIdx = (UARTcurrentBaudIdx + 1) % ARRAY_SIZE(TxToHandsetBauds);
+    return TxToHandsetBauds[UARTcurrentBaudIdx];
+}
+#endif
 
 bool CRSF::UARTwdt()
 {
@@ -778,12 +839,12 @@ bool CRSF::UARTwdt()
             if (CRSFstate == true)
             {
                 DBGLN("CRSF UART Disconnected");
-                disconnected();
+                if (disconnected) disconnected();
                 CRSFstate = false;
             }
 
-            UARTcurrentBaudIdx = (UARTcurrentBaudIdx + 1) % ARRAY_SIZE(TxToHandsetBauds);
-            uint32_t UARTrequestedBaud = TxToHandsetBauds[UARTcurrentBaudIdx];
+            UARTrequestedBaud = autobaud();
+
             DBGLN("UART WDT: Switch to: %d baud", UARTrequestedBaud);
 
             adjustMaxPacketSize();
@@ -835,91 +896,101 @@ bool CRSF::UARTwdt()
 bool CRSF::RXhandleUARTout()
 {
     bool retVal = false;
-#if !defined(CRSF_RCVR_NO_SERIAL)
-    // don't write more than 128 bytes at a time to avoid RX buffer overflow
-    const int maxBytesPerCall = 128;
-    uint32_t bytesWritten = 0;
-    #if defined(PLATFORM_ESP8266) && defined(USE_MSP_WIFI)
-        while (msp2crsf.FIFOout.size() > msp2crsf.FIFOout.peek() && (bytesWritten + msp2crsf.FIFOout.peek()) < maxBytesPerCall)
+    if (!OPT_CRSF_RCVR_NO_SERIAL)
+    {
+        // don't write more than 128 bytes at a time to avoid RX buffer overflow
+        const int maxBytesPerCall = 128;
+        uint32_t bytesWritten = 0;
+        #if defined(PLATFORM_ESP8266) && defined(USE_MSP_WIFI)
+            while (msp2crsf.FIFOout.size() > msp2crsf.FIFOout.peek() && (bytesWritten + msp2crsf.FIFOout.peek()) < maxBytesPerCall)
+            {
+                uint8_t OutPktLen = msp2crsf.FIFOout.pop();
+                uint8_t OutData[OutPktLen];
+                msp2crsf.FIFOout.popBytes(OutData, OutPktLen);
+                this->_dev->write(OutData, OutPktLen); // write the packet out
+                bytesWritten += OutPktLen;
+                retVal = true;
+            }
+        #endif
+
+        while (SerialOutFIFO.size() > SerialOutFIFO.peek() && (bytesWritten + SerialOutFIFO.peek()) < maxBytesPerCall)
         {
-            uint8_t OutPktLen = msp2crsf.FIFOout.pop();
+            noInterrupts();
+            uint8_t OutPktLen = SerialOutFIFO.pop();
             uint8_t OutData[OutPktLen];
-            msp2crsf.FIFOout.popBytes(OutData, OutPktLen);
+            SerialOutFIFO.popBytes(OutData, OutPktLen);
+            interrupts();
             this->_dev->write(OutData, OutPktLen); // write the packet out
             bytesWritten += OutPktLen;
             retVal = true;
         }
-    #endif
-
-    while (SerialOutFIFO.size() > SerialOutFIFO.peek() && (bytesWritten + SerialOutFIFO.peek()) < maxBytesPerCall)
-    {
-        noInterrupts();
-        uint8_t OutPktLen = SerialOutFIFO.pop();
-        uint8_t OutData[OutPktLen];
-        SerialOutFIFO.popBytes(OutData, OutPktLen);
-        interrupts();
-        this->_dev->write(OutData, OutPktLen); // write the packet out
-        bytesWritten += OutPktLen;
-        retVal = true;
     }
-#endif // CRSF_RCVR_NO_SERIAL
     return retVal;
 }
 
 void CRSF::sendLinkStatisticsToFC()
 {
-#if !defined(CRSF_RCVR_NO_SERIAL) && !defined(DEBUG_CRSF_NO_OUTPUT)
-    constexpr uint8_t outBuffer[4] = {
-        LinkStatisticsFrameLength + 4,
-        CRSF_ADDRESS_FLIGHT_CONTROLLER,
-        LinkStatisticsFrameLength + 2,
-        CRSF_FRAMETYPE_LINK_STATISTICS
-    };
+#if !defined(DEBUG_CRSF_NO_OUTPUT)
+    if (!OPT_CRSF_RCVR_NO_SERIAL)
+    {
+        constexpr uint8_t outBuffer[4] = {
+            LinkStatisticsFrameLength + 4,
+            CRSF_ADDRESS_FLIGHT_CONTROLLER,
+            LinkStatisticsFrameLength + 2,
+            CRSF_FRAMETYPE_LINK_STATISTICS
+        };
 
-    uint8_t crc = crsf_crc.calc(outBuffer[3]);
-    crc = crsf_crc.calc((byte *)&LinkStatistics, LinkStatisticsFrameLength, crc);
+        uint8_t crc = crsf_crc.calc(outBuffer[3]);
+        crc = crsf_crc.calc((byte *)&LinkStatistics, LinkStatisticsFrameLength, crc);
 
-    if (SerialOutFIFO.ensure(outBuffer[0] + 1)) {
-        SerialOutFIFO.pushBytes(outBuffer, sizeof(outBuffer));
-        SerialOutFIFO.pushBytes((byte *)&LinkStatistics, LinkStatisticsFrameLength);
-        SerialOutFIFO.push(crc);
+        if (SerialOutFIFO.ensure(outBuffer[0] + 1)) {
+            SerialOutFIFO.pushBytes(outBuffer, sizeof(outBuffer));
+            SerialOutFIFO.pushBytes((byte *)&LinkStatistics, LinkStatisticsFrameLength);
+            SerialOutFIFO.push(crc);
+        }
+
+        //this->_dev->write(outBuffer, LinkStatisticsFrameLength + 4);
     }
-
-    //this->_dev->write(outBuffer, LinkStatisticsFrameLength + 4);
-#endif // CRSF_RCVR_NO_SERIAL
+#endif // DEBUG_CRSF_NO_OUTPUT
 }
 
 void ICACHE_RAM_ATTR CRSF::sendRCFrameToFC()
 {
-#if !defined(CRSF_RCVR_NO_SERIAL) && !defined(DEBUG_CRSF_NO_OUTPUT)
-    constexpr uint8_t outBuffer[] = {
-        // No need for length prefix as we aren't using the FIFO
-        CRSF_ADDRESS_FLIGHT_CONTROLLER,
-        RCframeLength + 2,
-        CRSF_FRAMETYPE_RC_CHANNELS_PACKED
-    };
+#if !defined(DEBUG_CRSF_NO_OUTPUT)
+    if (!OPT_CRSF_RCVR_NO_SERIAL)
+    {
+        constexpr uint8_t outBuffer[] = {
+            // No need for length prefix as we aren't using the FIFO
+            CRSF_ADDRESS_FLIGHT_CONTROLLER,
+            RCframeLength + 2,
+            CRSF_FRAMETYPE_RC_CHANNELS_PACKED
+        };
 
-    uint8_t crc = crsf_crc.calc(outBuffer[2]);
-    crc = crsf_crc.calc((byte *)&PackedRCdataOut, RCframeLength, crc);
+        uint8_t crc = crsf_crc.calc(outBuffer[2]);
+        crc = crsf_crc.calc((byte *)&PackedRCdataOut, RCframeLength, crc);
 
-    //SerialOutFIFO.push(RCframeLength + 4);
-    //SerialOutFIFO.pushBytes(outBuffer, RCframeLength + 4);
-    this->_dev->write(outBuffer, sizeof(outBuffer));
-    this->_dev->write((byte *)&PackedRCdataOut, RCframeLength);
-    this->_dev->write(crc);
-#endif // CRSF_RCVR_NO_SERIAL
+        //SerialOutFIFO.push(RCframeLength + 4);
+        //SerialOutFIFO.pushBytes(outBuffer, RCframeLength + 4);
+        this->_dev->write(outBuffer, sizeof(outBuffer));
+        this->_dev->write((byte *)&PackedRCdataOut, RCframeLength);
+        this->_dev->write(crc);
+    }
+#endif // DEBUG_CRSF_NO_OUTPUT
 }
 
 void ICACHE_RAM_ATTR CRSF::sendMSPFrameToFC(uint8_t* data)
 {
-#if !defined(CRSF_RCVR_NO_SERIAL) && !defined(DEBUG_CRSF_NO_OUTPUT)
-    const uint8_t totalBufferLen = CRSF_FRAME_SIZE(data[1]);
-    if (totalBufferLen <= CRSF_FRAME_SIZE_MAX)
+#if !defined(DEBUG_CRSF_NO_OUTPUT)
+    if (!OPT_CRSF_RCVR_NO_SERIAL)
     {
-        data[0] = CRSF_ADDRESS_FLIGHT_CONTROLLER;
-        this->_dev->write(data, totalBufferLen);
+        const uint8_t totalBufferLen = CRSF_FRAME_SIZE(data[1]);
+        if (totalBufferLen <= CRSF_FRAME_SIZE_MAX)
+        {
+            data[0] = CRSF_ADDRESS_FLIGHT_CONTROLLER;
+            this->_dev->write(data, totalBufferLen);
+        }
     }
-#endif // CRSF_RCVR_NO_SERIAL
+#endif // DEBUG_CRSF_NO_OUTPUT
 }
 
 /**
@@ -950,28 +1021,72 @@ uint16_t CRSF::GetChannelOutput(uint8_t ch)
 
 #endif // CRSF_RX_MODULE
 
+/***
+ * @brief: Convert `version` (string) to a integer version representation
+ * e.g. "2.2.15 ISM24G" => 0x0002020f
+ * Assumes all version fields are < 256, the number portion
+ * MUST be followed by a space to correctly be parsed
+ ***/
+uint32_t CRSF::VersionStrToU32(const char *verStr)
+{
+    uint32_t retVal = 0;
+#if !defined(FORCE_NO_DEVICE_VERSION)
+    uint8_t accumulator = 0;
+    char c;
+    while (c = *verStr)
+    {
+        ++verStr;
+        // A decimal indicates moving to a new version field
+        // and the space after the version ends that field
+        if (c == '.' || c == ' ')
+        {
+            retVal = (retVal << 8) | accumulator;
+            accumulator = 0;
+        }
+        // Else if this is a number add it up
+        else if (c >= '0' && c <= '9')
+        {
+            accumulator = (accumulator * 10) + (c - '0');
+        }
+        // Anything except [0-9. ] ends the parsing
+        else
+        {
+            break;
+        }
+    }
+#endif
+    return retVal;
+}
+
 void CRSF::GetDeviceInformation(uint8_t *frame, uint8_t fieldCount)
 {
-    deviceInformationPacket_t *device = (deviceInformationPacket_t *)(frame + sizeof(crsf_ext_header_t) + device_name_size);
+    const uint8_t size = strlen(device_name)+1;
+    deviceInformationPacket_t *device = (deviceInformationPacket_t *)(frame + sizeof(crsf_ext_header_t) + size);
     // Packet starts with device name
-    memcpy(frame + sizeof(crsf_ext_header_t), device_name, device_name_size);
+    memcpy(frame + sizeof(crsf_ext_header_t), device_name, size);
     // Followed by the device
     device->serialNo = htobe32(0x454C5253); // ['E', 'L', 'R', 'S'], seen [0x00, 0x0a, 0xe7, 0xc6] // "Serial 177-714694" (value is 714694)
     device->hardwareVer = 0; // unused currently by us, seen [ 0x00, 0x0b, 0x10, 0x01 ] // "Hardware: V 1.01" / "Bootloader: V 3.06"
-    device->softwareVer = 0; // unused currently by us, seen [ 0x00, 0x00, 0x05, 0x0f ] // "Firmware: V 5.15"
+    device->softwareVer = htobe32(VersionStrToU32(version)); // seen [ 0x00, 0x00, 0x05, 0x0f ] // "Firmware: V 5.15"
     device->fieldCnt = fieldCount;
     device->parameterVersion = 0;
+}
+
+void CRSF::SetHeaderAndCrc(uint8_t *frame, uint8_t frameType, uint8_t frameSize, uint8_t destAddr)
+{
+    crsf_header_t *header = (crsf_header_t *)frame;
+    header->device_addr = destAddr;
+    header->frame_size = frameSize;
+    header->type = frameType;
+
+    uint8_t crc = crsf_crc.calc(&frame[CRSF_FRAME_NOT_COUNTED_BYTES], frameSize - 1, 0);
+    frame[frameSize + CRSF_FRAME_NOT_COUNTED_BYTES - 1] = crc;
 }
 
 void CRSF::SetExtendedHeaderAndCrc(uint8_t *frame, uint8_t frameType, uint8_t frameSize, uint8_t senderAddr, uint8_t destAddr)
 {
     crsf_ext_header_t *header = (crsf_ext_header_t *)frame;
     header->dest_addr = destAddr;
-    header->device_addr = destAddr;
-    header->type = frameType;
     header->orig_addr = senderAddr;
-    header->frame_size = frameSize;
-
-    uint8_t crc = crsf_crc.calc(&frame[CRSF_FRAME_NOT_COUNTED_BYTES], header->frame_size - 1, 0);
-    frame[header->frame_size + CRSF_FRAME_NOT_COUNTED_BYTES - 1] = crc;
+    SetHeaderAndCrc(frame, frameType, frameSize, destAddr);
 }
