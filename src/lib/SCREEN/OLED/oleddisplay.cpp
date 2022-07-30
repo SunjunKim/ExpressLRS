@@ -120,10 +120,14 @@ void OLEDDisplay::displayIdleScreen(uint8_t changed, uint8_t rate_index, uint8_t
 {
     u8g2->clearBuffer();
     String power = getValue(STATE_POWER, dynamic ? running_power_index : power_index);
+    int snr = dbgDispSnr>128 ? dbgDispSnr-256 : dbgDispSnr;
+    String snr_str = String(snr);
+
     if (dynamic)
     {
         power += " *";
     }
+    // power += "/" + (String)dbgDispSnr;
 
     u8g2->setFont(u8g2_font_t0_15_mr);
     if (connectionState == radioFailed)
@@ -141,7 +145,7 @@ void OLEDDisplay::displayIdleScreen(uint8_t changed, uint8_t rate_index, uint8_t
         u8g2->drawStr(0, 15, getValue(STATE_PACKET, rate_index));
         u8g2->drawStr(70, 15, getValue(STATE_TELEMETRY_CURR, ratio_index));
         u8g2->drawStr(0, 32, power.c_str());
-        u8g2->drawStr(70, 32, version);
+        u8g2->drawStr(70, 32, snr_str.c_str());
     }
     else
     {
@@ -152,7 +156,7 @@ void OLEDDisplay::displayIdleScreen(uint8_t changed, uint8_t rate_index, uint8_t
         u8g2->setFont(u8g2_font_profont10_mr);
         u8g2->drawStr(70, 56, "TLM");
         u8g2->drawStr(0, 27, "Ver: ");
-        u8g2->drawStr(38, 27, version);
+        u8g2->drawStr(38, 27, snr_str.c_str());
     }
     u8g2->sendBuffer();
 }

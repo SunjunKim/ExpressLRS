@@ -33,6 +33,8 @@ ELRS_EEPROM eeprom;
 TxConfig config;
 Stream *TxBackpack;
 
+uint8_t dbgDispSnr;
+
 #if defined(PLATFORM_ESP8266) || defined(PLATFORM_ESP32)
 unsigned long rebootTime = 0;
 extern bool webserverPreventAutoStart;
@@ -150,6 +152,7 @@ void ICACHE_RAM_ATTR LinkStatsFromOta(OTA_LinkStats_s * const ls)
 #if defined(DEBUG_FREQ_CORRECTION)
   // Don't descale the FreqCorrection value being send in SNR
   crsf.LinkStatistics.uplink_SNR = snrScaled;
+  dbgDispSnr = snrScaled;
 #else
   crsf.LinkStatistics.uplink_SNR = SNR_DESCALE(snrScaled);
 #endif

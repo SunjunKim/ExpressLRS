@@ -100,6 +100,7 @@ enum {
 
 // Value used for expresslrs_rf_pref_params_s.DynpowerUpThresholdSnr if SNR should not be used
 #define DYNPOWER_SNR_THRESH_NONE -127
+extern uint8_t dbgDispSnr;
 
 typedef struct expresslrs_rf_pref_params_s
 {
@@ -165,6 +166,7 @@ extern expresslrs_rf_pref_params_s *ExpressLRS_currAirRate_RFperfParams;
 
 #define SNR_SCALE(snr) ((int8_t)((float)snr * RADIO_SNR_SCALE))
 #define SNR_DESCALE(snrScaled) (snrScaled / RADIO_SNR_SCALE)
+
 
 #endif // UNIT_TEST
 

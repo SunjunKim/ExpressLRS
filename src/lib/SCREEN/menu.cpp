@@ -85,6 +85,10 @@ static void displayIdleScreen(bool init)
         changed |= last_fan != config.GetFanMode() ? CHANGED_FAN : 0;
     }
 
+    #if defined(DEBUG_FREQ_CORRECTION)
+        changed |= 1;
+    #endif
+
     if (changed)
     {
         last_message = disp_message;
@@ -554,8 +558,10 @@ fsm_state_event_t const splash_events[] = {
 fsm_state_event_t const idle_events[] = {
     {EVENT_TIMEOUT, GOTO(STATE_IDLE)},
     {EVENT_LONG_ENTER, PUSH(main_menu_fsm)},
-    {EVENT_LONG_RIGHT, PUSH(main_menu_fsm)}
+    {EVENT_LONG_RIGHT, PUSH(main_menu_fsm)},
+    {EVENT_ENTER, GOTO(STATE_IDLE)}
 };
+
 fsm_state_entry_t const entry_fsm[] = {
     {STATE_SPLASH, nullptr, displaySplashScreen, 5000, splash_events, ARRAY_SIZE(splash_events)},
     {STATE_IDLE, nullptr, displayIdleScreen, 100, idle_events, ARRAY_SIZE(idle_events)},
