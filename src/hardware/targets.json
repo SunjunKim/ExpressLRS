@@ -1119,6 +1119,17 @@
                 "upload_methods": ["uart", "wifi", "betaflight"],
                 "platform": "esp8285",
                 "firmware": "Unified_ESP8285_2400_RX"
+            },
+            "rp4": {
+                "product_name": "RadioMaster RP4 True Diversity 2.4GHz RX",
+                "lua_name": "RadioMstr RP4",
+                "layout_file": "Generic 2400 Diversity RM.json",
+                "overlay": {
+                    "radio_dcdc": true
+                },
+                "upload_methods": ["uart", "wifi", "betaflight"],
+                "platform": "esp32",
+                "firmware": "Unified_ESP32_2400_RX"
             }
         }
     },
