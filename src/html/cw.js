@@ -27,8 +27,9 @@ _('start-cw').onclick = (e) => {
   e.stopPropagation();
   e.preventDefault();
   _('start-cw').disabled = true;
-  // _('optionsRadios1').disabled = true;
-  // _('optionsRadios2').disabled = true;
+  _('optionsRadios1').disabled = true;
+  _('optionsRadios2').disabled = true;
+  _('optionsRadios3').disabled = true;
   const xmlhttp = new XMLHttpRequest();
   xmlhttp.open('POST', '/cw', true);
   xmlhttp.onreadystatechange = function() {};
