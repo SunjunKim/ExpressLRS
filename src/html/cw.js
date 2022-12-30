@@ -13,9 +13,9 @@ function init() {
   xmlhttp.onreadystatechange = function() {
     if (this.readyState == 4 && this.status == 200) {
       const data = JSON.parse(this.responseText);
-      if (data.radios == 2) {
+      // if (data.radios == 2) {
         _('radioOption').style.display = 'block';
-      }
+      // }
       _('start-cw').disabled = false;
     }
   };
@@ -27,13 +27,13 @@ _('start-cw').onclick = (e) => {
   e.stopPropagation();
   e.preventDefault();
   _('start-cw').disabled = true;
-  _('optionsRadios1').disabled = true;
-  _('optionsRadios2').disabled = true;
+  // _('optionsRadios1').disabled = true;
+  // _('optionsRadios2').disabled = true;
   const xmlhttp = new XMLHttpRequest();
   xmlhttp.open('POST', '/cw', true);
   xmlhttp.onreadystatechange = function() {};
   const formdata = new FormData;
-  formdata.append('radio', _('optionsRadios1').checked ? 1 : 2);
+  formdata.append('radio', _('optionsRadios1').checked ? 1 : (_('optionsRadios2').checked ? 2: 3));
   xmlhttp.send(formdata);
 };
 

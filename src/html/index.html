@@ -60,6 +60,16 @@
 							</select>
 							<label>Regulatory domain</label>
 						</div>
+@@else:
+						<div class="mui-select">
+							<select id='domain' name='domain'>
+								<option value='0'>ISM2G4</option>
+								<option value='1'>KC_LOW</option>
+								<option value='2'>KC_MID</option>
+								<option value='3'>KC_HIGH</option>
+							</select>
+							<label>Regulatory domain</label>
+						</div>
 @@end
 						<div class="mui-textfield">
 							<input size='3' id='wifi-on-interval' name='wifi-on-interval' type='text'/>
