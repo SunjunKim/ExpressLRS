@@ -611,7 +611,7 @@ static void registerLuaParameters()
 
   #if defined(PLATFORM_ESP32) || defined(PLATFORM_ESP8266)
   registerLUAParameter(&luaWiFiFolder);
-  registerLUAParameter(&luaWebUpdate, &luahandWifiBle, luaWiFiFolder.common.id);
+  // registerLUAParameter(&luaWebUpdate, &luahandWifiBle, luaWiFiFolder.common.id);
   #else
   if (HAS_RADIO || OPT_USE_TX_BACKPACK) {
     registerLUAParameter(&luaWiFiFolder);
@@ -644,7 +644,7 @@ static void registerLuaParameters()
   }
 
   #if defined(PLATFORM_ESP32)
-  registerLUAParameter(&luaBLEJoystick, &luahandWifiBle);
+  // registerLUAParameter(&luaBLEJoystick, &luahandWifiBle);
   #endif
 
   if (HAS_RADIO) {
