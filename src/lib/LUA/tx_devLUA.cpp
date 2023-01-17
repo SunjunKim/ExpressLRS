@@ -621,7 +621,7 @@ static void registerLuaParameters()
     registerLUAParameter(&luaRxWebUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
 
     if (OPT_USE_TX_BACKPACK) {
-      registerLUAParameter(&luaTxBackpackUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
+      // registerLUAParameter(&luaTxBackpackUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
       registerLUAParameter(&luaVRxBackpackUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
       // Backpack folder
       registerLUAParameter(&luaBackpackFolder);
