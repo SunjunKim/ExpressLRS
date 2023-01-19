@@ -775,7 +775,7 @@ static void HandleContinuousWave(AsyncWebServerRequest *request) {
     POWERMGNT::init();
     POWERMGNT::setPower(POWERMGNT::getMinPower());
 
-    if (cw_freq == 1) Radio.startCWTest(2400400000, radio);
+    if (cw_freq == 1) Radio.startCWTest(2403400000, radio);
     else if (cw_freq == 2) Radio.startCWTest(2439400000, radio);
     else if (cw_freq == 3) Radio.startCWTest(2479400000, radio);
     else Radio.startCWTest(2440000000, radio);
