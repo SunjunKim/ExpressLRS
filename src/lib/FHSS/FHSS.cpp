@@ -97,6 +97,16 @@ void FHSSrandomiseFHSSsequence(const uint32_t seed)
         }
     }
 
+    // KC domain specific -- move the first ten channels to the other end of the sequence
+    uint16_t spread = (FHSSconfig->freq_count - 10) / 11;
+    for (uint16_t i=0; i < FHSSgetSequenceCount(); i++)
+    {            
+        if (FHSSsequence[i] < 10)
+        {
+            FHSSsequence[i] = FHSSsequence[i] * spread + 10;
+        }
+    }
+
     // output FHSS sequence
     for (uint16_t i=0; i < FHSSgetSequenceCount(); i++)
     {
