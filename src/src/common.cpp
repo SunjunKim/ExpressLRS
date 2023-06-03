@@ -206,6 +206,6 @@ void initUID()
 }
 
 bool ICACHE_RAM_ATTR isDualRadio()
-{    
+{
     return GPIO_PIN_NSS_2 != UNDEF_PIN;
 }
