@@ -850,7 +850,7 @@ void SetSyncSpam()
   // Send sync spam if a UI device has requested to and the config has changed
   if (config.IsModified())
   {
-    syncSpamCounter = syncSpamAmount;
+    syncSpamCounter = syncSpamAmount * 20;
   }
 }
 
