@@ -1651,6 +1651,8 @@ void setup()
 
         connectionState = hardwareUndefined;
     }
+    #else
+    hardwareConfigured = options_init();
     #endif
 
     if (hardwareConfigured)
