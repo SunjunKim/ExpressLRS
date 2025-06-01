@@ -24,7 +24,7 @@ const fhss_config_t domains[] = {
 
 #if defined(RADIO_LR1121)
 const fhss_config_t domainsDualBand[] = {
-    {"KC2G4", FREQ_HZ_TO_REG_VAL(2420400000), FREQ_HZ_TO_REG_VAL(2479400000), 60, 2450000000}
+    {"KC2G4", FREQ_HZ_TO_REG_VAL(2420400000), FREQ_HZ_TO_REG_VAL(2420400000), 3, 2420400000}
 };
 #endif
 
