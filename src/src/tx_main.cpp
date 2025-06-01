@@ -1042,7 +1042,7 @@ static void ExitBindingMode()
   InBindingMode = false; // Clear binding mode before SetRFLinkRate() for correct IQ
 
   UARTconnected();
-  
+
   SetRFLinkRate(config.GetRate()); //return to original rate
 
   DBGLN("Exiting binding mode");
@@ -1216,12 +1216,12 @@ static void setupSerial()
 // Setup TxBackpack
 #if defined(PLATFORM_ESP32)
   Stream *serialPort;
-  
-  if(firmwareOptions.is_airport) 
+
+  if(firmwareOptions.is_airport)
   {
     serialPort = new HardwareSerial(1);
     ((HardwareSerial *)serialPort)->begin(firmwareOptions.uart_baud, SERIAL_8N1, U0RXD_GPIO_NUM, U0TXD_GPIO_NUM);
-  }  
+  }
   else if (GPIO_PIN_DEBUG_RX != UNDEF_PIN && GPIO_PIN_DEBUG_TX != UNDEF_PIN)
   {
     serialPort = new HardwareSerial(2);
@@ -1487,11 +1487,29 @@ void setup()
     config.SetMotionMode(0); // Ensure motion detection is off
     UARTconnected();
   }
+
+  hwTimer::stop();
+
+  // Set transmit power to minimum
+  POWERMGNT::setPower(MinPower);
+
+  DBGLN("Stopping Radio");
+  Radio.End();
+
+  Radio.TXdoneCallback = [](){};
+  Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
+
+  POWERMGNT::init();
+  POWERMGNT::setPower(POWERMGNT::getMinPower());
+
+  Radio.startCWTest(2440000000, SX12XX_Radio_1);
 }
 
 void loop()
 {
   uint32_t now = millis();
+
+  return;
 
   HandleUARTout(); // Only used for non-CRSF output
 
