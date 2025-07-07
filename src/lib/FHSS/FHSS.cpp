@@ -38,7 +38,7 @@ const fhss_config_t domains[] = {
     #elif defined(Regulatory_Domain_ISM_2400)
         "KC2G4",
     #endif
-    FREQ_HZ_TO_REG_VAL(2420400000), FREQ_HZ_TO_REG_VAL(2479400000), 80, 2440000000}
+    FREQ_HZ_TO_REG_VAL(2420400000), FREQ_HZ_TO_REG_VAL(2479400000), 60, 2450000000}
 };
 #endif
 
