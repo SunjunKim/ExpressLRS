@@ -7,7 +7,6 @@
 #include "CRSFHandset.h"
 #include "config.h"
 #include "logging.h"
-#include "MAVLink.h"
 
 #define BACKPACK_TIMEOUT 20    // How often to check for backpack commands
 
@@ -32,7 +31,7 @@ bool lastRecordingState = false;
 #include "CRSF.h"
 #include "hwTimer.h"
 
-[[noreturn]] void startPassthrough()
+[[noreturn]] void startPassthrough(const bool useUSB = false)
 {
     // stop everything
     devicesStop();
@@ -43,35 +42,21 @@ bool lastRecordingState = false;
     Stream *uplink = &CRSFHandset::Port;
 
     uint32_t baud = PASSTHROUGH_BAUD == -1 ? BACKPACK_LOGGING_BAUD : PASSTHROUGH_BAUD;
+
     // get ready for passthrough
-    if (GPIO_PIN_RCSIGNAL_RX == GPIO_PIN_RCSIGNAL_TX)
+    if (useUSB)
     {
-        #if defined(PLATFORM_ESP32_S3)
-        // if UART0 is connected to the backpack then use the USB for the uplink
-        if (GPIO_PIN_DEBUG_RX == 44 && GPIO_PIN_DEBUG_TX == 43)
-        {
-            uplink = &Serial;
-            Serial.setTxBufferSize(1024);
-            Serial.setRxBufferSize(16384);
-        }
-        else
-        {
-            CRSFHandset::Port.begin(baud, SERIAL_8N1, 44, 43);  // pins are configured as 44 and 43
-            CRSFHandset::Port.setTxBufferSize(1024);
-            CRSFHandset::Port.setRxBufferSize(16384);
-        }
-        #else
-        CRSFHandset::Port.begin(baud, SERIAL_8N1, 3, 1);  // default pin configuration 3 and 1
-        CRSFHandset::Port.setTxBufferSize(1024);
-        CRSFHandset::Port.setRxBufferSize(16384);
-        #endif
+        uplink = &Serial;
+        Serial.setTxBufferSize(1024);
+        Serial.setRxBufferSize(16384);
     }
     else
     {
-        CRSFHandset::Port.begin(baud, SERIAL_8N1, GPIO_PIN_RCSIGNAL_RX, GPIO_PIN_RCSIGNAL_TX);
+        CRSFHandset::Port.begin(baud, SERIAL_8N1, U0RXD_GPIO_NUM, U0TXD_GPIO_NUM);
         CRSFHandset::Port.setTxBufferSize(1024);
         CRSFHandset::Port.setRxBufferSize(16384);
     }
+
     disableLoopWDT();
 
     const auto backpack = (HardwareSerial*)TxBackpack;
@@ -172,7 +157,7 @@ void checkBackpackUpdate()
         if (byte == resync[resync_pos])
         {
             resync_pos++;
-            if (resync_pos == sizeof(resync)) startPassthrough();
+            if (resync_pos == sizeof(resync)) startPassthrough(true);
         }
         else
         {
@@ -398,7 +383,7 @@ static int event()
     if (OPT_USE_TX_BACKPACK && GPIO_PIN_BACKPACK_EN != UNDEF_PIN)
     {
         // EN should be HIGH to be active
-        digitalWrite(GPIO_PIN_BACKPACK_EN, config.GetBackpackDisable() ? LOW : HIGH);
+        digitalWrite(GPIO_PIN_BACKPACK_EN, (config.GetBackpackDisable() || connectionState == bleJoystick || connectionState == wifiUpdate) ? LOW : HIGH);
     }
 #endif
 

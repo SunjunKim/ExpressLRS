@@ -13,7 +13,6 @@ extern TCPSOCKET wifi2tcp;
 #include "devMSPVTX.h"
 #endif
 
-#include "crsf2msp.h"
 #include "helpers.h"
 
 // Size byte in FIFO contains bit to indicate if the frame is deleted
@@ -172,7 +171,8 @@ bool Telemetry::RXhandleUARTin(uint8_t data)
 
             break;
         case RECEIVING_LENGTH:
-            if (data >= CRSF_MAX_PACKET_LEN)
+            if (data < (CRSF_MIN_PACKET_LEN - CRSF_FRAME_NOT_COUNTED_BYTES) ||
+                data > (CRSF_MAX_PACKET_LEN - CRSF_FRAME_NOT_COUNTED_BYTES))
             {
                 telemetry_state = TELEMETRY_IDLE;
                 return false;
@@ -274,14 +274,13 @@ void Telemetry::AppendTelemetryPackage(uint8_t *package)
         {
 #if defined(USE_MSP_WIFI)
             // this probably needs refactoring in the future, I think we should have this telemetry class inside the crsf module
-            if (wifi2tcp.hasClient() && (header->type == CRSF_FRAMETYPE_MSP_RESP || header->type == CRSF_FRAMETYPE_MSP_REQ)) // if we have a client we probs wanna talk to it
+            if (header->type == CRSF_FRAMETYPE_MSP_RESP || header->type == CRSF_FRAMETYPE_MSP_REQ) // if we have a client we probs wanna talk to it
             {
-                DBGLN("Got MSP frame, forwarding to client, len: %d", currentTelemetryByte);
-                crsf2msp.parse(package);
+                wifi2tcp.crsfMspIn(package);
             }
 #endif
 #if defined(HAS_MSP_VTX)
-            else if (header->type == CRSF_FRAMETYPE_MSP_RESP)
+            if (header->type == CRSF_FRAMETYPE_MSP_RESP)
             {
                 mspVtxProcessPacket(package);
             }
@@ -365,7 +364,7 @@ void Telemetry::AppendTelemetryPackage(uint8_t *package)
     }
 }
 
-bool Telemetry::GetNextPayload(uint8_t* nextPayloadSize, uint8_t **payloadData)
+bool Telemetry::GetNextPayload(uint8_t* nextPayloadSize, uint8_t *currentPayload)
 {
 #if defined(PLATFORM_ESP32) && SOC_CPU_CORES_NUM > 1
     std::lock_guard<std::mutex> lock(mutex);
@@ -399,7 +398,6 @@ bool Telemetry::GetNextPayload(uint8_t* nextPayloadSize, uint8_t **payloadData)
                     }
                     // set the pointers to the payload
                     *nextPayloadSize = CRSF_FRAME_SIZE(currentPayload[CRSF_TELEMETRY_LENGTH_INDEX]);
-                    *payloadData = currentPayload;
                     return true;
                 }
             }
@@ -421,12 +419,9 @@ bool Telemetry::GetNextPayload(uint8_t* nextPayloadSize, uint8_t **payloadData)
         }
         messagePayloads.popBytes(currentPayload, size);
         *nextPayloadSize = CRSF_FRAME_SIZE(currentPayload[CRSF_TELEMETRY_LENGTH_INDEX]);
-        *payloadData = currentPayload;
         return true;
     }
 
-    *nextPayloadSize = 0;
-    *payloadData = nullptr;
     return false;
 }
 

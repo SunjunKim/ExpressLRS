@@ -127,14 +127,6 @@ Telemetry telemetry;
 Stream *SerialLogger;
 bool hardwareConfigured = true;
 
-#if defined(USE_MSP_WIFI)
-#include "crsf2msp.h"
-#include "msp2crsf.h"
-
-CROSSFIRE2MSP crsf2msp;
-MSP2CROSSFIRE msp2crsf;
-#endif
-
 #if defined(PLATFORM_ESP8266) || defined(PLATFORM_ESP32)
 unsigned long rebootTime = 0;
 extern bool webserverPreventAutoStart;
@@ -177,14 +169,13 @@ SerialIO *serialIO = nullptr;
     #define SERIAL1_PROTOCOL_RX Serial1
 #endif
 
+uint8_t currentTelemetryPayload[CRSF_MAX_PACKET_LEN];
 StubbornSender TelemetrySender;
 static uint8_t telemetryBurstCount;
 static uint8_t telemetryBurstMax;
 
 StubbornReceiver MspReceiver;
 uint8_t MspData[ELRS_MSP_BUFFER];
-
-uint8_t mavlinkSSBuffer[CRSF_MAX_PACKET_LEN]; // Buffer for current stubbon sender packet (mavlink only)
 
 static bool tlmSent = false;
 static uint8_t NextTelemetryType = ELRS_TELEMETRY_TYPE_LINK;
@@ -372,7 +363,7 @@ void SetRFLinkRate(uint8_t index, bool bindMode) // Set speed of RF link
     FHSSuseDualBand = ModParams->radio_type == RADIO_TYPE_LR1121_LORA_DUAL;
 
     Radio.Config(ModParams->bw, ModParams->sf, ModParams->cr, FHSSgetInitialFreq(),
-                 ModParams->PreambleLen, invertIQ, ModParams->PayloadLength, 0
+                 ModParams->PreambleLen, invertIQ, ModParams->PayloadLength
 #if defined(RADIO_SX128X)
                  , uidMacSeedGet(), OtaCrcInitializer, (ModParams->radio_type == RADIO_TYPE_SX128x_FLRC)
 #endif
@@ -385,7 +376,7 @@ void SetRFLinkRate(uint8_t index, bool bindMode) // Set speed of RF link
     if (FHSSuseDualBand)
     {
         Radio.Config(ModParams->bw2, ModParams->sf2, ModParams->cr2, FHSSgetInitialGeminiFreq(),
-                    ModParams->PreambleLen2, invertIQ, ModParams->PayloadLength, 0,
+                    ModParams->PreambleLen2, invertIQ, ModParams->PayloadLength,
                     ModParams->radio_type == RADIO_TYPE_LR1121_GFSK_900 || ModParams->radio_type == RADIO_TYPE_LR1121_GFSK_2G4,
                     (uint8_t)UID[5], (uint8_t)UID[4], SX12XX_Radio_2);
     }
@@ -396,7 +387,7 @@ void SetRFLinkRate(uint8_t index, bool bindMode) // Set speed of RF link
     checkGeminiMode();
     if (geminiMode)
     {
-        Radio.SetFrequencyReg(FHSSgetInitialGeminiFreq(), SX12XX_Radio_2);
+        Radio.SetFrequencyReg(FHSSgetInitialGeminiFreq(), SX12XX_Radio_2, false);
     }
 
     OtaUpdateSerializers(smWideOr8ch, ModParams->PayloadLength);
@@ -410,6 +401,8 @@ void SetRFLinkRate(uint8_t index, bool bindMode) // Set speed of RF link
     ExpressLRS_currAirRate_RFperfParams = RFperf;
     ExpressLRS_nextAirRateIndex = index; // presumably we just handled this
     telemBurstValid = false;
+
+    LbtEnableIfRequired();
 }
 
 bool ICACHE_RAM_ATTR HandleFHSS()
@@ -427,20 +420,20 @@ bool ICACHE_RAM_ATTR HandleFHSS()
     {
         if ((((OtaNonce + 1)/ExpressLRS_currAirRate_Modparams->FHSShopInterval) % 2 == 0) || FHSSuseDualBand) // When in DualBand do not switch between radios.  The OTA modulation paramters and HighFreq/LowFreq Tx amps are set during Config.
         {
-            Radio.SetFrequencyReg(FHSSgetNextFreq(), SX12XX_Radio_1);
-            Radio.SetFrequencyReg(FHSSgetGeminiFreq(), SX12XX_Radio_2);
+            Radio.SetFrequencyReg(FHSSgetNextFreq(), SX12XX_Radio_1, false);
+            Radio.SetFrequencyReg(FHSSgetGeminiFreq(), SX12XX_Radio_2, false);
         }
         else
         {
             // Write radio1 first. This optimises the SPI traffic order.
             uint32_t freqRadio2 = FHSSgetNextFreq();
-            Radio.SetFrequencyReg(FHSSgetGeminiFreq(), SX12XX_Radio_1);
-            Radio.SetFrequencyReg(freqRadio2, SX12XX_Radio_2);
+            Radio.SetFrequencyReg(FHSSgetGeminiFreq(), SX12XX_Radio_1, false);
+            Radio.SetFrequencyReg(freqRadio2, SX12XX_Radio_2, false);
         }
     }
     else
     {
-        Radio.SetFrequencyReg(FHSSgetNextFreq());
+        Radio.SetFrequencyReg(FHSSgetNextFreq(), SX12XX_Radio_All, false);
     }
 
 #if defined(RADIO_SX127X)
@@ -451,9 +444,7 @@ bool ICACHE_RAM_ATTR HandleFHSS()
         Radio.RXnb();
     }
 #endif
-#if defined(Regulatory_Domain_EU_CE_2400)
-    SetClearChannelAssessmentTime();
-#endif
+    LbtCcaTimerStart();
     return true;
 }
 
@@ -571,25 +562,16 @@ bool ICACHE_RAM_ATTR HandleSendTelemetryResponse()
     {
         transmittingRadio = SX12XX_Radio_NONE;
     }
-    else if (isDualRadio())
-    {
-        transmittingRadio = SX12XX_Radio_All;
-    }
     else
     {
-        transmittingRadio = Radio.GetLastSuccessfulPacketRadio();
+        transmittingRadio = LbtChannelIsClear(SX12XX_Radio_All);   // weed out the radio(s) if channel in use
+        if (isDualRadio() && !geminiMode && transmittingRadio == SX12XX_Radio_All) // If the receiver is in diversity mode, only send TLM on a single radio.
+        {
+            transmittingRadio = Radio.GetStrongestReceivingRadio(); // Pick the radio with best rf connection to the tx.
+        }
     }
 
-#if defined(Regulatory_Domain_EU_CE_2400)
-    transmittingRadio &= ChannelIsClear(transmittingRadio);   // weed out the radio(s) if channel in use
-#endif
-
-    if (!geminiMode && transmittingRadio == SX12XX_Radio_All) // If the receiver is in diversity mode, only send TLM on a single radio.
-    {
-        transmittingRadio = Radio.LastPacketRSSI > Radio.LastPacketRSSI2 ? SX12XX_Radio_1 : SX12XX_Radio_2; // Pick the radio with best rf connection to the tx.
-    }
-
-    Radio.TXnb((uint8_t*)&otaPkt, ExpressLRS_currAirRate_Modparams->PayloadLength, transmittingRadio);
+    Radio.TXnb((uint8_t*)&otaPkt, transmittingRadio);
 
     if (transmittingRadio == SX12XX_Radio_NONE)
     {
@@ -1223,9 +1205,7 @@ bool ICACHE_RAM_ATTR RXdoneISR(SX12xxDriverCommon::rx_status const status)
 void ICACHE_RAM_ATTR TXdoneISR()
 {
     Radio.RXnb();
-#if defined(Regulatory_Domain_EU_CE_2400)
-    SetClearChannelAssessmentTime();
-#endif
+    LbtCcaTimerStart();
 #if defined(DEBUG_RX_SCOREBOARD)
     DBGW('T');
 #endif
@@ -1261,7 +1241,10 @@ void MspReceiveComplete()
 #if !defined(PLATFORM_STM32)
     case MSP_ELRS_MAVLINK_TLM: // 0xFD
         // raw mavlink data
-        mavlinkOutputBuffer.atomicPushBytes(&MspData[2], MspData[1]);
+        if (config.GetSerialProtocol() == PROTOCOL_MAVLINK)
+        {
+            ((SerialMavlink *)serialIO)->forwardMessage(MspData);
+        }
         break;
 #endif
     default:
@@ -1352,6 +1335,7 @@ static void setupSerial()
         sbusSerialOutput = true;
         serialBaud = 100000;
     }
+#if !defined(TARGET_RX_GHOST_ATTO_V1)
     else if (config.GetSerialProtocol() == PROTOCOL_SUMD)
     {
         sumdSerialOutput = true;
@@ -1368,6 +1352,7 @@ static void setupSerial()
         hottTlmSerial = true;
         serialBaud = 19200;
     }
+#endif
 #endif
     bool invert = config.GetSerialProtocol() == PROTOCOL_SBUS || config.GetSerialProtocol() == PROTOCOL_INVERTED_CRSF || config.GetSerialProtocol() == PROTOCOL_DJI_RS_PRO;
 
@@ -1689,10 +1674,6 @@ static void setupRadio()
     }
 
     DynamicPower_UpdateRx(true);  // Call before SetRFLinkRate(). The LR1121 Radio lib can now set the correct output power in Config().
-
-#if defined(Regulatory_Domain_EU_CE_2400)
-    LBTEnabled = (config.GetPower() > PWR_10mW);
-#endif
 
     Radio.RXdoneCallback = &RXdoneISR;
     Radio.TXdoneCallback = &TXdoneISR;
@@ -2037,9 +2018,7 @@ static void CheckConfigChangePending()
         LostConnection(false);
         config.Commit();
         devicesTriggerEvent();
-#if defined(Regulatory_Domain_EU_CE_2400)
-        LBTEnabled = (config.GetPower() > PWR_10mW);
-#endif
+        LbtEnableIfRequired();
         Radio.RXnb();
     }
 }
@@ -2255,26 +2234,16 @@ void loop()
         DBGLN("Timer locked");
     }
 
-    uint8_t *nextPayload = 0;
     uint8_t nextPlayloadSize = 0;
-    if (!TelemetrySender.IsActive() && telemetry.GetNextPayload(&nextPlayloadSize, &nextPayload))
+    if (!TelemetrySender.IsActive() && telemetry.GetNextPayload(&nextPlayloadSize, currentTelemetryPayload))
     {
-        TelemetrySender.SetDataToTransmit(nextPayload, nextPlayloadSize);
+        TelemetrySender.SetDataToTransmit(currentTelemetryPayload, nextPlayloadSize);
     }
 
 #if !defined(PLATFORM_STM32)
-    uint16_t count = mavlinkInputBuffer.size();
-    if (count > 0 && !TelemetrySender.IsActive())
+    if (config.GetSerialProtocol() == PROTOCOL_MAVLINK && !TelemetrySender.IsActive() && ((SerialMavlink *)serialIO)->GetNextPayload(&nextPlayloadSize, currentTelemetryPayload))
     {
-        count = std::min(count, (uint16_t)CRSF_PAYLOAD_SIZE_MAX); // Constrain to CRSF max payload size to match SS
-        // First 2 bytes conform to crsf_header_s format
-        mavlinkSSBuffer[0] = CRSF_ADDRESS_USB; // device_addr - used on TX to differentiate between std tlm and mavlink
-        mavlinkSSBuffer[1] = count;
-        // Following n bytes are just raw mavlink
-        mavlinkInputBuffer.popBytes(mavlinkSSBuffer + CRSF_FRAME_NOT_COUNTED_BYTES, count);
-        nextPayload = mavlinkSSBuffer;
-        nextPlayloadSize = count + CRSF_FRAME_NOT_COUNTED_BYTES;
-        TelemetrySender.SetDataToTransmit(nextPayload, nextPlayloadSize);
+        TelemetrySender.SetDataToTransmit(currentTelemetryPayload, nextPlayloadSize);
     }
 #endif
 

@@ -10,6 +10,7 @@
 static int8_t servoPins[PWM_MAX_CHANNELS];
 static pwm_channel_t pwmChannels[PWM_MAX_CHANNELS];
 static uint16_t pwmChannelValues[PWM_MAX_CHANNELS];
+static bool initialized = false;
 
 #if (defined(PLATFORM_ESP32))
 static DShotRMT *dshotInstances[PWM_MAX_CHANNELS] = {nullptr};
@@ -58,7 +59,8 @@ static void servoWrite(uint8_t ch, uint16_t us)
         // DBGLN("Writing DShot output: us: %u, ch: %d", us, ch);
         if (dshotInstances[ch])
         {
-            dshotInstances[ch]->send_dshot_value(((us - 1000) * 2) + 47); // Convert PWM signal in us to DShot value
+            us = fmap(constrain(us, 1000, 2000), 1000, 2000, DSHOT_THROTTLE_MIN, DSHOT_THROTTLE_MAX); // Convert PWM signal in us to DShot value
+            dshotInstances[ch]->send_dshot_value(us);
         }
     }
     else
@@ -179,6 +181,7 @@ static void initialize()
                 auto rmtChannel = (rmt_channel_t)rmtCH;
                 DBGLN("Initializing DShot: gpio: %u, ch: %d, rmtChannel: %u", gpio, ch, rmtChannel);
                 pinMode(pin, OUTPUT);
+                digitalWrite(pin, LOW);                
                 dshotInstances[ch] = new DShotRMT(gpio, rmtChannel); // Initialize the DShotRMT instance
                 rmtCH++;
             }
@@ -204,27 +207,6 @@ static void initialize()
     }
 }
 
-static int start()
-{
-    for (int ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ++ch)
-    {
-        const rx_config_pwm_t *chConfig = config.GetPwmChannel(ch);
-        auto frequency = servoOutputModeToFrequency((eServoOutputMode)chConfig->val.mode);
-        if (frequency && servoPins[ch] != UNDEF_PIN)
-        {
-            pwmChannels[ch] = PWM.allocate(servoPins[ch], frequency);
-        }
-#if defined(PLATFORM_ESP32)
-        else if (((eServoOutputMode)chConfig->val.mode) == somDShot)
-        {
-            dshotInstances[ch]->begin(DSHOT300, false); // Set DShot protocol and bidirectional dshot bool
-            dshotInstances[ch]->send_dshot_value(0);         // Set throttle low so the ESC can continue initialsation
-        }
-#endif
-    }
-    return DURATION_NEVER;
-}
-
 static int event()
 {
     if (!OPT_HAS_SERVO_OUTPUT || connectionState == disconnected)
@@ -233,7 +215,7 @@ static int event()
         // so it is safe to shut down when disconnected
         return DURATION_NEVER;
     }
-    else if (connectionState == wifiUpdate)
+    if (connectionState == wifiUpdate)
     {
         for (int ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ++ch)
         {
@@ -253,6 +235,25 @@ static int event()
         }
         return DURATION_NEVER;
     }
+    if (!initialized && connectionState == connected)
+    {
+        initialized = true;
+        for (int ch = 0; ch < GPIO_PIN_PWM_OUTPUTS_COUNT; ++ch)
+        {
+            const rx_config_pwm_t *chConfig = config.GetPwmChannel(ch);
+            const auto frequency = servoOutputModeToFrequency((eServoOutputMode)chConfig->val.mode);
+            if (frequency && servoPins[ch] != UNDEF_PIN)
+            {
+                pwmChannels[ch] = PWM.allocate(servoPins[ch], frequency);
+            }
+#if defined(PLATFORM_ESP32)
+            else if ((eServoOutputMode)chConfig->val.mode == somDShot)
+            {
+                dshotInstances[ch]->begin(DSHOT300, false); // Set DShot protocol and bidirectional dshot bool
+            }
+#endif
+        }
+    }
     return DURATION_IMMEDIATELY;
 }
 
@@ -264,7 +265,7 @@ static int timeout()
 
 device_t ServoOut_device = {
     .initialize = initialize,
-    .start = start,
+    .start = nullptr,
     .event = event,
     .timeout = timeout,
 };
