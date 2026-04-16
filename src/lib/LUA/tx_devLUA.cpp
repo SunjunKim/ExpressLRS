@@ -22,7 +22,7 @@
 #define STR_LUA_PACKETRATES \
     "K1000 Full Low Band;DK500 2.4G;200 Full Low Band;250 Low Band;X100 Full;X150;" \
     "50 2.4G;100 Full 2.4G;150 2.4G;250 2.4G;333 Full 2.4G;500 2.4G;" \
-    "50 Low Band;100 Low Band;100 Full Low Band;200 Low Band"
+    "Not Avail;Not Avail;Not Avail;Not Avail"
 #elif defined(RADIO_SX128X)
 #define STR_LUA_PACKETRATES \
     "50Hz(-115dBm);100Hz Full(-112dBm);150Hz(-112dBm);250Hz(-108dBm);333Hz Full(-105dBm);500Hz(-105dBm);" \
@@ -790,7 +790,7 @@ static void registerLuaParameters()
   // WIFI folder
   #if defined(PLATFORM_ESP32) || defined(PLATFORM_ESP8266)
   registerLUAParameter(&luaWiFiFolder);
-  registerLUAParameter(&luaWebUpdate, &luahandWifiBle, luaWiFiFolder.common.id);
+  // registerLUAParameter(&luaWebUpdate, &luahandWifiBle, luaWiFiFolder.common.id);
   #else
   if (HAS_RADIO || OPT_USE_TX_BACKPACK) {
     registerLUAParameter(&luaWiFiFolder);
@@ -800,7 +800,7 @@ static void registerLuaParameters()
     registerLUAParameter(&luaRxWebUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
 
     if (OPT_USE_TX_BACKPACK) {
-      registerLUAParameter(&luaTxBackpackUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
+      // registerLUAParameter(&luaTxBackpackUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
       registerLUAParameter(&luaVRxBackpackUpdate, &luahandSimpleSendCmd, luaWiFiFolder.common.id);
       // Backpack folder
       registerLUAParameter(&luaBackpackFolder);
@@ -853,7 +853,7 @@ static void registerLuaParameters()
   }
 
   #if defined(PLATFORM_ESP32)
-  registerLUAParameter(&luaBLEJoystick, &luahandWifiBle);
+  // registerLUAParameter(&luaBLEJoystick, &luahandWifiBle);
   #endif
 
   if (HAS_RADIO) {
