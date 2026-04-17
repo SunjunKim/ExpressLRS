@@ -1505,13 +1505,14 @@ void setup()
 
   Radio.TXdoneCallback = [](){};
   
-  /* Block for CW - uncomment it for the CW output, leave the comment for RX test mode */
-  // Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
+  /* Block for CW - comment it out RX test mode */
+  Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
 
-  // POWERMGNT::init();
-  // POWERMGNT::setPower(POWERMGNT::getMinPower());
+  POWERMGNT::init();
+  POWERMGNT::setPower(POWERMGNT::getMinPower());
 
-  // Radio.startCWTest(2440000000, SX12XX_Radio_1);
+  Radio.startCWTest(2440000000, SX12XX_Radio_1);
+  /* block end */
 }
 
 void loop()

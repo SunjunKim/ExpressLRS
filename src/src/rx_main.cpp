@@ -2176,6 +2176,13 @@ void setup()
     // setup() eats up some of this time, which can cause the first mode connection to fail.
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
+
+    Radio.RXdoneCallback = [](){};
+    Radio.TXdoneCallback = [](){};
+    Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
+    POWERMGNT::init();
+    POWERMGNT::setPower(POWERMGNT::getMinPower());
+    Radio.startCWTest(2440000000, SX12XX_Radio_1);
 }
 
 #if defined(PLATFORM_ESP32_C3)
