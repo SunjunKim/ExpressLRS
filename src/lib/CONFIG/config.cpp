@@ -45,6 +45,11 @@ template<class T> static const uint32_t Model_to_U32(T const * const model)
     return converter.u32;
 }
 
+static uint8_t ClampPowerToMax(uint8_t power)
+{
+    return std::min(power, static_cast<uint8_t>(MaxPower));
+}
+
 static uint8_t RateV6toV7(uint8_t rateV6)
 {
 #if defined(RADIO_SX127X) || defined(RADIO_LR1121)
@@ -183,6 +188,7 @@ void TxConfig::Load()
             m_config.backpackTlmMode = value8;
     }
 
+    bool updatedAnyModelConfig = false;
     for(unsigned i=0; i<CONFIG_TX_MODEL_CNT; i++)
     {
         char model[10] = "model";
@@ -203,7 +209,36 @@ void TxConfig::Load()
                 nvs_set_u32(handle, model, Model_to_U32(newModel));
             }
         }
+
+        bool updatedThisModelConfig = false;
+        model_config_t * const modelConfig = &m_config.model_config[i];
+        const uint8_t clampedPower = ClampPowerToMax(modelConfig->power);
+        if (modelConfig->power != clampedPower)
+        {
+            modelConfig->power = clampedPower;
+            updatedThisModelConfig = true;
+        }
+
+        #if defined(RADIO_LR1121)
+        // Legacy 900MHz LR1121 rates [0..3] are invalid for current 2.4-only configs.
+        if (modelConfig->rate <= 3)
+        {
+            modelConfig->rate = enumRatetoIndex(RATE_LORA_250HZ);
+            updatedThisModelConfig = true;
+        }
+        #endif
+
+        if (updatedThisModelConfig)
+        {
+            nvs_set_u32(handle, model, Model_to_U32(modelConfig));
+            updatedAnyModelConfig = true;
+        }
     } // for each model
+
+    if (updatedAnyModelConfig)
+    {
+        nvs_commit(handle);
+    }
 
     if (version != TX_CONFIG_VERSION)
     {
@@ -221,9 +256,21 @@ void TxConfig::Load()
         version = m_config.version & ~CONFIG_MAGIC_MASK;
     DBGLN("Config version %u", version);
 
-    // If version is current, all done
+    // If version is current, all done after clamping loaded model powers
     if (version == TX_CONFIG_VERSION)
+    {
+        for (unsigned i=0; i<CONFIG_TX_MODEL_CNT; i++)
+        {
+            const uint8_t clampedPower = ClampPowerToMax(m_config.model_config[i].power);
+            if (m_config.model_config[i].power != clampedPower)
+            {
+                m_config.model_config[i].power = clampedPower;
+                m_modified |= MODEL_CHANGED;
+            }
+        }
+        Commit();
         return;
+    }
 
     // Can't upgrade from version <5, or when flashing a previous version, just use defaults.
     if (version < 5 || version > TX_CONFIG_VERSION)
@@ -657,10 +704,15 @@ TxConfig::SetDefaults(bool commit)
         #if defined(RADIO_SX127X)
             SetRate(enumRatetoIndex(RATE_LORA_200HZ));
         #elif defined(RADIO_LR1121)
-            SetRate(enumRatetoIndex(POWER_OUTPUT_VALUES_COUNT == 0 ? RATE_LORA_250HZ : RATE_LORA_200HZ));
+            SetRate(enumRatetoIndex(RATE_LORA_250HZ));
         #elif defined(RADIO_SX128X)
             SetRate(enumRatetoIndex(RATE_LORA_250HZ));
         #endif
+        if (GPIO_PIN_NSS_2 != UNDEF_PIN)
+        {
+            // Prefer switched single-radio TX by default when Gemini is available.
+            SetAntennaMode(TX_RADIO_MODE_SWITCH);
+        }
         SetPower(POWERMGNT::getDefaultPower());
 #if defined(PLATFORM_ESP32)
         // ESP32 nvs needs to commit every model
@@ -725,9 +777,17 @@ void RxConfig::Load()
         version = m_config.version & ~CONFIG_MAGIC_MASK;
     DBGLN("Config version %u", version);
 
-    // If version is current, all done
+    const uint8_t clampedPower = ClampPowerToMax(m_config.power);
+
+    // If version is current, all done after clamping loaded power
     if (version == RX_CONFIG_VERSION)
     {
+        if (m_config.power != clampedPower)
+        {
+            m_config.power = clampedPower;
+            m_modified = true;
+            Commit();
+        }
         CheckUpdateFlashedUid(false);
         return;
     }
@@ -746,6 +806,7 @@ void RxConfig::Load()
     UpgradeEepromV5();
     UpgradeEepromV6();
     UpgradeEepromV7V8();
+    m_config.power = ClampPowerToMax(m_config.power);
     m_config.version = RX_CONFIG_VERSION | RX_CONFIG_MAGIC;
     m_modified = true;
     Commit();

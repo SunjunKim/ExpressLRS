@@ -219,6 +219,13 @@ static void hardware_LoadFieldsFromDoc(JsonDocument &doc)
             }
         }
     }
+
+    // Unified TX/RX hardware configs should not raise max/default above the minimum.
+    if (hardware[HARDWARE_power_min].int_value >= 0)
+    {
+        hardware[HARDWARE_power_max].int_value = hardware[HARDWARE_power_min].int_value;
+        hardware[HARDWARE_power_default].int_value = hardware[HARDWARE_power_min].int_value;
+    }
 }
 
 bool hardware_init(EspFlashStream &strmFlash)
