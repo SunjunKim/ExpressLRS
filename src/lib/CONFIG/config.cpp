@@ -6,6 +6,11 @@
 #include "helpers.h"
 #include "logging.h"
 
+static uint8_t ClampPowerToMax(uint8_t power)
+{
+    return std::min(power, static_cast<uint8_t>(POWERMGNT::getMaxPower()));
+}
+
 #if defined(TARGET_TX)
 
 #define MODEL_CHANGED       bit(1)
@@ -43,11 +48,6 @@ template<class T> static const uint32_t Model_to_U32(T const * const model)
 
     converter.val.model = *model;
     return converter.u32;
-}
-
-static uint8_t ClampPowerToMax(uint8_t power)
-{
-    return std::min(power, static_cast<uint8_t>(MaxPower));
 }
 
 static uint8_t RateV6toV7(uint8_t rateV6)
