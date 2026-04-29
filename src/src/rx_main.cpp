@@ -217,6 +217,11 @@ bool didFHSS = false;
 bool alreadyFHSS = false;
 bool alreadyTLMresp = false;
 
+// When true, the receiver is held in continuous-wave (CW) test mode and
+// loop()/ISRs must NOT reprogram the radio (no RXnb, SetRFLinkRate,
+// LostConnection-driven reinit, FHSS, telemetry TX, etc.).
+static bool cwTestMode = false;
+
 //////////////////////////////////////////////////////////////
 
 ///////Variables for Telemetry and Link Quality///////////////
@@ -719,91 +724,16 @@ void ICACHE_RAM_ATTR HWtimerCallbackTick() // this is 180 out of phase with the 
 }
 
 //////////////////////////////////////////////////////////////
-// flip to the other antenna
-// no-op if GPIO_PIN_ANT_CTRL not defined
+// Antenna selection is fixed at boot in setupTarget() (pin driven LOW = Antenna A)
+// and intentionally NOT changed at runtime. Both switchAntenna() and updateDiversity()
+// are kept as no-ops so the rest of the call sites (HWtimerCallbackTick, etc.) compile
+// unchanged, but the GPIO and the `antenna` index never move after setup.
 static inline void switchAntenna()
 {
-    if (GPIO_PIN_ANT_CTRL != UNDEF_PIN && config.GetAntennaMode() == 2)
-    {
-        // 0 and 1 is use for gpio_antenna_select
-        // 2 is diversity
-        antenna = !antenna;
-        (antenna == 0) ? LPF_UplinkRSSI0.reset() : LPF_UplinkRSSI1.reset(); // discard the outdated value after switching
-        digitalWrite(GPIO_PIN_ANT_CTRL, antenna);
-        if (GPIO_PIN_ANT_CTRL_COMPL != UNDEF_PIN)
-        {
-            digitalWrite(GPIO_PIN_ANT_CTRL_COMPL, !antenna);
-        }
-    }
 }
 
 static void ICACHE_RAM_ATTR updateDiversity()
 {
-
-    if (GPIO_PIN_ANT_CTRL != UNDEF_PIN)
-    {
-        if(config.GetAntennaMode() == 2)
-        {
-            // 0 and 1 is use for gpio_antenna_select
-            // 2 is diversity
-            static int32_t prevRSSI;        // saved rssi so that we can compare if switching made things better or worse
-            static int32_t antennaLQDropTrigger;
-            static int32_t antennaRSSIDropTrigger;
-            int32_t rssi = (antenna == 0) ? LPF_UplinkRSSI0.value() : LPF_UplinkRSSI1.value();
-            int32_t otherRSSI = (antenna == 0) ? LPF_UplinkRSSI1.value() : LPF_UplinkRSSI0.value();
-
-            //if rssi dropped by the amount of DIVERSITY_ANTENNA_RSSI_TRIGGER
-            if ((rssi < (prevRSSI - DIVERSITY_ANTENNA_RSSI_TRIGGER)) && antennaRSSIDropTrigger >= DIVERSITY_ANTENNA_INTERVAL)
-            {
-                switchAntenna();
-                antennaLQDropTrigger = 1;
-                antennaRSSIDropTrigger = 0;
-            }
-            else if (rssi > prevRSSI || antennaRSSIDropTrigger < DIVERSITY_ANTENNA_INTERVAL)
-            {
-                prevRSSI = rssi;
-                antennaRSSIDropTrigger++;
-            }
-
-            // if we didn't get a packet switch the antenna
-            if (!LQCalc.currentIsSet() && antennaLQDropTrigger == 0)
-            {
-                switchAntenna();
-                antennaLQDropTrigger = 1;
-                antennaRSSIDropTrigger = 0;
-            }
-            else if (antennaLQDropTrigger >= DIVERSITY_ANTENNA_INTERVAL)
-            {
-                // We switched antenna on the previous packet, so we now have relatively fresh rssi info for both antennas.
-                // We can compare the rssi values and see if we made things better or worse when we switched
-                if (rssi < otherRSSI)
-                {
-                    // things got worse when we switched, so change back.
-                    switchAntenna();
-                    antennaLQDropTrigger = 1;
-                    antennaRSSIDropTrigger = 0;
-                }
-                else
-                {
-                    // all good, we can stay on the current antenna. Clear the flag.
-                    antennaLQDropTrigger = 0;
-                }
-            }
-            else if (antennaLQDropTrigger > 0)
-            {
-                antennaLQDropTrigger ++;
-            }
-        }
-        else
-        {
-            digitalWrite(GPIO_PIN_ANT_CTRL, config.GetAntennaMode());
-            if (GPIO_PIN_ANT_CTRL_COMPL != UNDEF_PIN)
-            {
-                digitalWrite(GPIO_PIN_ANT_CTRL_COMPL, !config.GetAntennaMode());
-            }
-            antenna = config.GetAntennaMode();
-        }
-    }
 }
 
 void ICACHE_RAM_ATTR HWtimerCallbackTock()
@@ -2177,12 +2107,30 @@ void setup()
     // Resetting the time here give the first mode a better chance of connection.
     RFmodeLastCycled = millis();
 
-    Radio.RXdoneCallback = [](){};
+
+    hwTimer::stop();
+
+    InBindingMode = false;
+
+    Radio.End();
+
+
+
+    // RXdoneCallback signature is bool(rx_status), TXdoneCallback is void().
     Radio.TXdoneCallback = [](){};
     Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
     POWERMGNT::init();
     POWERMGNT::setPower(POWERMGNT::getMinPower());
+
+    // GPIO_PIN_ANT_CTRL is fixed at setupTarget() and not modified further.
+
     Radio.startCWTest(2440000000, SX12XX_Radio_1);
+
+    // Lock the radio in CW mode so loop()/ISRs do not call RXnb,
+    // SetRFLinkRate, LostConnection, FHSS, telemetry, etc. which would
+    // otherwise immediately knock the chip out of continuous-wave TX.
+    cwTestMode = true;
+    DBGLN("CW test mode active @ 2440 MHz, radio output is locked");
 }
 
 #if defined(PLATFORM_ESP32_C3)
@@ -2191,6 +2139,13 @@ void main_loop()
 void loop()
 #endif
 {
+    if (cwTestMode)
+    {
+        // In CW test mode, skip everything except the serial IO handling, to keep the radio in continuous wave transmit mode for testing purposes.
+        handleSerialIO();
+        return;
+    }
+
     unsigned long now = millis();
 
     if (MspReceiver.HasFinishedData())
@@ -2209,6 +2164,14 @@ void loop()
         ESP.restart();
     }
     #endif
+
+    // CW test: skip ALL RF state-machine work so the radio stays in
+    // continuous-wave TX. cycleRfMode/LostConnection/SetRFLinkRate/RXnb
+    // would otherwise immediately reprogram the chip back into LoRa RX.
+    if (cwTestMode)
+    {
+        return;
+    }
 
     CheckConfigChangePending();
     executeDeferredFunction(micros());

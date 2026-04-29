@@ -78,11 +78,7 @@ __attribute__ ((used)) static firmware_options_t flashedOptions = {
     .fan_min_runtime = 30,
 #endif
 #if defined(PLATFORM_ESP32) || defined(PLATFORM_ESP8266)
-    #if defined(AUTO_WIFI_ON_INTERVAL)
-        .wifi_auto_on_interval = AUTO_WIFI_ON_INTERVAL * 1000,
-    #else
-        .wifi_auto_on_interval = -1,
-    #endif
+    .wifi_auto_on_interval = -1,
     #if defined(HOME_WIFI_SSID)
         .home_wifi_ssid = {HOME_WIFI_SSID},
     #else

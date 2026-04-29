@@ -1268,7 +1268,11 @@ void HandleMSP2WIFI()
 static int start()
 {
   ipAddress.fromString(wifi_ap_address);
-  return firmwareOptions.wifi_auto_on_interval;
+  // Force-disable auto WiFi update mode regardless of AUTO_WIFI_ON_INTERVAL.
+  // Manual entry paths (Lua, 6-plug, configurator) still work because they
+  // set connectionState = wifiUpdate directly, which is handled in event().
+  webserverPreventAutoStart = true;
+  return DURATION_NEVER;
 }
 
 static int event()
