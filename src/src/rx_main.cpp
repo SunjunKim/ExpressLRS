@@ -719,90 +719,34 @@ void ICACHE_RAM_ATTR HWtimerCallbackTick() // this is 180 out of phase with the 
 }
 
 //////////////////////////////////////////////////////////////
-// flip to the other antenna
-// no-op if GPIO_PIN_ANT_CTRL not defined
+// Antenna switching is disabled on this build: GPIO_PIN_ANT_CTRL is
+// pinned LOW (and GPIO_PIN_ANT_CTRL_COMPL HIGH) at all times.
+// switchAntenna() and updateDiversity() are kept as no-ops that
+// re-assert the fixed state in case anything else touched the pins.
 static inline void switchAntenna()
 {
-    if (GPIO_PIN_ANT_CTRL != UNDEF_PIN && config.GetAntennaMode() == 2)
+    if (GPIO_PIN_ANT_CTRL != UNDEF_PIN)
     {
-        // 0 and 1 is use for gpio_antenna_select
-        // 2 is diversity
-        antenna = !antenna;
-        (antenna == 0) ? LPF_UplinkRSSI0.reset() : LPF_UplinkRSSI1.reset(); // discard the outdated value after switching
-        digitalWrite(GPIO_PIN_ANT_CTRL, antenna);
+        antenna = 0;
+        LPF_UplinkRSSI0.reset();
+        digitalWrite(GPIO_PIN_ANT_CTRL, LOW);
         if (GPIO_PIN_ANT_CTRL_COMPL != UNDEF_PIN)
         {
-            digitalWrite(GPIO_PIN_ANT_CTRL_COMPL, !antenna);
+            digitalWrite(GPIO_PIN_ANT_CTRL_COMPL, HIGH);
         }
     }
 }
 
 static void ICACHE_RAM_ATTR updateDiversity()
 {
-
     if (GPIO_PIN_ANT_CTRL != UNDEF_PIN)
     {
-        if(config.GetAntennaMode() == 2)
+        digitalWrite(GPIO_PIN_ANT_CTRL, LOW);
+        if (GPIO_PIN_ANT_CTRL_COMPL != UNDEF_PIN)
         {
-            // 0 and 1 is use for gpio_antenna_select
-            // 2 is diversity
-            static int32_t prevRSSI;        // saved rssi so that we can compare if switching made things better or worse
-            static int32_t antennaLQDropTrigger;
-            static int32_t antennaRSSIDropTrigger;
-            int32_t rssi = (antenna == 0) ? LPF_UplinkRSSI0.value() : LPF_UplinkRSSI1.value();
-            int32_t otherRSSI = (antenna == 0) ? LPF_UplinkRSSI1.value() : LPF_UplinkRSSI0.value();
-
-            //if rssi dropped by the amount of DIVERSITY_ANTENNA_RSSI_TRIGGER
-            if ((rssi < (prevRSSI - DIVERSITY_ANTENNA_RSSI_TRIGGER)) && antennaRSSIDropTrigger >= DIVERSITY_ANTENNA_INTERVAL)
-            {
-                switchAntenna();
-                antennaLQDropTrigger = 1;
-                antennaRSSIDropTrigger = 0;
-            }
-            else if (rssi > prevRSSI || antennaRSSIDropTrigger < DIVERSITY_ANTENNA_INTERVAL)
-            {
-                prevRSSI = rssi;
-                antennaRSSIDropTrigger++;
-            }
-
-            // if we didn't get a packet switch the antenna
-            if (!LQCalc.currentIsSet() && antennaLQDropTrigger == 0)
-            {
-                switchAntenna();
-                antennaLQDropTrigger = 1;
-                antennaRSSIDropTrigger = 0;
-            }
-            else if (antennaLQDropTrigger >= DIVERSITY_ANTENNA_INTERVAL)
-            {
-                // We switched antenna on the previous packet, so we now have relatively fresh rssi info for both antennas.
-                // We can compare the rssi values and see if we made things better or worse when we switched
-                if (rssi < otherRSSI)
-                {
-                    // things got worse when we switched, so change back.
-                    switchAntenna();
-                    antennaLQDropTrigger = 1;
-                    antennaRSSIDropTrigger = 0;
-                }
-                else
-                {
-                    // all good, we can stay on the current antenna. Clear the flag.
-                    antennaLQDropTrigger = 0;
-                }
-            }
-            else if (antennaLQDropTrigger > 0)
-            {
-                antennaLQDropTrigger ++;
-            }
+            digitalWrite(GPIO_PIN_ANT_CTRL_COMPL, HIGH);
         }
-        else
-        {
-            digitalWrite(GPIO_PIN_ANT_CTRL, config.GetAntennaMode());
-            if (GPIO_PIN_ANT_CTRL_COMPL != UNDEF_PIN)
-            {
-                digitalWrite(GPIO_PIN_ANT_CTRL_COMPL, !config.GetAntennaMode());
-            }
-            antenna = config.GetAntennaMode();
-        }
+        antenna = 0;
     }
 }
 
