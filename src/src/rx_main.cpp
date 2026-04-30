@@ -1564,21 +1564,15 @@ static void setupConfigAndPocCheck()
     config.SetStorageProvider(&eeprom); // Pass pointer to the Config class for access to storage
     config.Load();
 
-    // If bound, track number of plug/unplug cycles to go to binding mode in eeprom
-    if (config.GetIsBound() && config.GetPowerOnCounter() < 3)
+    // Power-on-counter-triggered binding mode is fully disabled in this firmware.
+    // The counter is no longer incremented on boot and updateBindingMode() ignores it,
+    // so plain power cycles can never trigger binding mode. Always clear the counter
+    // on startup so any stale value left from previous firmware does not linger.
+    if (config.GetPowerOnCounter() != 0)
     {
-        config.SetPowerOnCounter(config.GetPowerOnCounter() + 1);
+        config.SetPowerOnCounter(0);
         config.Commit();
     }
-
-    // Set a deferred function to clear the power on counter if the RX has been running for more than 2s
-    deferExecutionMillis(2000, []() {
-        if (connectionState != connected && config.GetPowerOnCounter() != 0)
-        {
-            config.SetPowerOnCounter(0);
-            config.Commit();
-        }
-    });
 }
 
 static void setupTarget()
@@ -1796,16 +1790,9 @@ static void updateBindingMode(unsigned long now)
     }
 #endif
 
-    // If the power on counter is >=3, enter binding, the counter will be reset after 2s
-    else if (!InBindingMode && config.GetPowerOnCounter() >= 3)
-    {
-#if defined(PLATFORM_ESP32) || defined(PLATFORM_ESP8266)
-        // Never enter wifi if forced to binding mode
-        webserverPreventAutoStart = true;
-#endif
-        DBGLN("Power on counter >=3, enter binding mode");
-        EnterBindingMode();
-    }
+    // Power-on-counter-triggered binding mode is disabled in this firmware.
+    // The RX will never enter binding mode based on GetPowerOnCounter(), regardless
+    // of how the counter was set (power cycles, web UI / BLE forced-bind reboot, etc.).
 
     // If the eeprom is indicating that we're not bound, enter binding
     else if (!UID_IS_BOUND(UID) && !InBindingMode)
@@ -1854,12 +1841,13 @@ void EnterBindingModeSafely()
     // Never enter wifi mode after requesting to enter binding mode
     webserverPreventAutoStart = true;
 
-    // If the radio and everything is shut down, better to reboot and boot to binding mode
+    // The radio is shut down while in wifi/BLE mode. Previously this path forced binding
+    // by setting the power-on counter to 3 and rebooting so updateBindingMode() would pick
+    // it up. With power-on-counter binding fully disabled, that mechanism no longer works,
+    // so a plain reboot is performed instead. The user can re-issue the bind request after
+    // the device comes back up.
     if (connectionState == wifiUpdate || connectionState == bleJoystick)
     {
-        // Force 3-plug binding mode
-        config.SetPowerOnCounter(3);
-        config.Commit();
         ESP.restart();
         // Unreachable
     }
