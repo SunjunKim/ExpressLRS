@@ -1488,9 +1488,11 @@ void setup()
 
   devicesStart();
 
+  // Force TLM ratio of 1:2 by default on every boot (overrides saved config)
+  config.SetTlm(TLM_RATIO_1_2);
+
   if (firmwareOptions.is_airport)
   {
-    config.SetTlm(TLM_RATIO_1_2); // Force TLM ratio of 1:2 for balanced bi-dir link
     config.SetMotionMode(0); // Ensure motion detection is off
     UARTconnected();
   }
